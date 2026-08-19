@@ -54,6 +54,37 @@ python test_system.py
 
 ---
 
+## Render Deployment Guide
+
+This repository is pre-configured for instant zero-configuration deployment on [Render](https://render.com/).
+
+### Option A: 1-Click Render Blueprint (Recommended)
+1. Push your latest code to your GitHub repository.
+2. Go to your [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Blueprint**.
+3. Connect your GitHub repository (`BioScan-AI`).
+4. Render will automatically detect `render.yaml` and configure the web service with all build and start commands.
+5. Click **Apply** to deploy.
+
+---
+
+### Option B: Manual Web Service Setup on Render
+1. In the Render Dashboard, click **New +** -> **Web Service**.
+2. Connect your GitHub repository.
+3. Configure the following service settings:
+   - **Name**: `bioscan-ai` (or any custom name)
+   - **Environment**: `Python`
+   - **Branch**: `main`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
+   - **Plan**: `Free`
+4. Add Environment Variables (under **Advanced**):
+   - `PYTHON_VERSION`: `3.11.0`
+   - `JWT_SECRET`: *(Generate a secure random string)*
+   - `DATA_DIR`: `./backend/data`
+5. Click **Create Web Service**.
+
+---
+
 ## Default Credentials (Demo / Development)
 
 | Portal | Route | Credentials |
@@ -71,3 +102,4 @@ python test_system.py
 - **Admin**: `GET /api/admin/dashboard`, `GET /api/admin/pending-faces`, `POST /api/admin/pending-faces/{id}/approve`, `POST /api/admin/pending-faces/{id}/reject`, `GET /api/admin/students`, `PUT /api/admin/students/{id}/status`, `DELETE /api/admin/students/{id}`, `GET /api/admin/audit-logs`, `POST /api/admin/settings/password`
 - **Attendance & Sessions**: `GET /api/attendance/sessions`, `POST /api/attendance/sessions`, `PUT /api/attendance/sessions/{id}/close`, `POST /api/attendance/recognize-and-mark`, `GET /api/attendance/records`
 - **Subjects**: `GET /api/subjects`, `POST /api/subjects`, `DELETE /api/subjects/{id}`
+

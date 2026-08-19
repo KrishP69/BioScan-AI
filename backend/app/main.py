@@ -1,5 +1,12 @@
 import os
+import sys
 from pathlib import Path
+
+# Add backend directory to sys.path to ensure 'app' modules resolve cleanly in any environment (Render, Docker, Local)
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
