@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# SQLite & Data files
+backend/data/*.db
+backend/data/*.sqlite3
+backend/data/*.sqlite
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
+*.db
+*.sqlite3
+
+# Environment variables & secrets
+.env
+.env.local
+*.local
+
+# IDE & Editor
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
