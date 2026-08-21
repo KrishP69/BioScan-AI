@@ -162,14 +162,60 @@ async def run_tests():
         assert dup_mark_res.json()["already_marked"] is True
         print("[PASS] 13. Duplicate Attendance Prevention in Same Session")
 
-        # 15. Audit Logs
+        # 15. Reset Active Session (clears records and resets count)
+        reset_res = await client.post(f"/api/attendance/sessions/{active_session_id}/reset", headers=admin_headers)
+        assert reset_res.status_code == 200
+        assert reset_res.json()["cleared_count"] == 1
+        
+        # Verify attendance records for session is now 0
+        records_after_reset = await client.get(f"/api/attendance/records?session_id={active_session_id}", headers=admin_headers)
+        assert records_after_reset.status_code == 200
+        assert len(records_after_reset.json()["records"]) == 0
+        print("[PASS] 14. Reset Active Session & Clear Attendance Records")
+
+        # 16. Re-mark attendance after reset & close session
+        re_mark = await client.post("/api/attendance/recognize-and-mark", headers=admin_headers, json={
+            "session_id": active_session_id,
+            "face_embedding": test_embedding,
+            "liveness_score": 0.98
+        })
+        assert re_mark.status_code == 200
+        assert re_mark.json()["matched"] is True
+
+        close_res = await client.put(f"/api/attendance/sessions/{active_session_id}/close", headers=admin_headers)
+        assert close_res.status_code == 200
+        print("[PASS] 15. Close Attendance Session")
+
+        # 17. Get Data from Closed Session of Active Students
+        closed_data_res = await client.get(f"/api/attendance/sessions/{active_session_id}/attendees?account_status=active", headers=admin_headers)
+        assert closed_data_res.status_code == 200
+        closed_data = closed_data_res.json()
+        assert closed_data["session"]["status"] == "closed"
+        assert closed_data["metrics"]["active_attendees"] >= 1
+        assert len(closed_data["records"]) >= 1
+        assert closed_data["records"][0]["student_account_status"] == "active"
+        print(f"[PASS] 16. Extract Data From Closed Session of Active Students ({closed_data['metrics']['active_attendees']} Active Attendee(s))")
+
+        # 18. Export CSV for Closed Session (Active Students)
+        csv_res = await client.get(f"/api/attendance/export/csv?session_id={active_session_id}&account_status=active", headers=admin_headers)
+        assert csv_res.status_code == 200
+        assert "text/csv" in csv_res.headers["content-type"]
+        assert test_roll.encode() in csv_res.content
+        print("[PASS] 17. Export Active Students CSV from Closed Session")
+
+        # 19. Remove / Delete Session
+        del_sess_res = await client.delete(f"/api/attendance/sessions/{active_session_id}", headers=admin_headers)
+        assert del_sess_res.status_code == 200
+        print(f"[PASS] 18. Remove Attendance Session (Session ID: {active_session_id})")
+
+        # 20. Audit Logs
         audit_res = await client.get("/api/admin/audit-logs", headers=admin_headers)
         assert audit_res.status_code == 200
         assert len(audit_res.json()["logs"]) > 0
-        print("[PASS] 14. System Audit Trail Verification")
+        print("[PASS] 19. System Audit Trail Verification")
 
         print("\n" + "="*60)
-        print("ALL 14 TEST SUITES PASSED PERFECTLY!")
+        print("ALL 19 TEST SUITES PASSED PERFECTLY!")
         print("="*60 + "\n")
 
 if __name__ == "__main__":

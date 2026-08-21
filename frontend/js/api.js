@@ -122,8 +122,16 @@ const api = (function () {
 
         // Attendance & Sessions
         getSessions: (status) => request(`/api/attendance/sessions${status ? '?status_filter=' + status : ''}`, { method: "GET" }),
+        getSessionAttendees: (id, params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return request(`/api/attendance/sessions/${id}/attendees${query ? '?' + query : ''}`, { method: "GET" });
+        },
         createSession: (data) => request("/api/attendance/sessions", { method: "POST", body: JSON.stringify(data) }),
         closeSession: (id) => request(`/api/attendance/sessions/${id}/close`, { method: "PUT" }),
+        reopenSession: (id) => request(`/api/attendance/sessions/${id}/reopen`, { method: "PUT" }),
+        resetSession: (id) => request(`/api/attendance/sessions/${id}/reset`, { method: "POST" }),
+        deleteSession: (id) => request(`/api/attendance/sessions/${id}`, { method: "DELETE" }),
+        cleanupClosedSessions: () => request("/api/attendance/sessions/cleanup/closed", { method: "DELETE" }),
         recognizeAndMark: (data) => request("/api/attendance/recognize-and-mark", { method: "POST", body: JSON.stringify(data) }),
         getAttendanceRecords: (params = {}) => {
             const query = new URLSearchParams(params).toString();

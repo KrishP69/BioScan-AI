@@ -236,11 +236,12 @@ const app = (function () {
     }
 
     // Helper: Modal dialog
-    function showModal(title, bodyHtml, footerButtonsHtml = "") {
+    function showModal(title, bodyHtml, footerButtonsHtml = "", customMaxWidth = "520px") {
         const overlay = document.getElementById("global-modal-overlay");
         const box = document.getElementById("global-modal-box");
         if (!overlay || !box) return;
 
+        box.style.maxWidth = customMaxWidth;
         box.innerHTML = `
             <div class="modal-header">
                 <h3>${title}</h3>
@@ -256,6 +257,8 @@ const app = (function () {
 
     function closeModal() {
         const overlay = document.getElementById("global-modal-overlay");
+        const box = document.getElementById("global-modal-box");
+        if (box) box.style.maxWidth = "";
         if (overlay) overlay.classList.add("hidden");
     }
 
@@ -1489,23 +1492,53 @@ const app = (function () {
                         <h2>Live AI Attendance Scanner</h2>
                         <p style="color:var(--text-secondary); font-size:0.92rem;">Real-time camera recognition against verified student biometric profiles.</p>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="app.navigate('/admin/dashboard')">
-                        <i class="fa-solid fa-arrow-left"></i> Dashboard
-                    </button>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn btn-primary btn-sm" onclick="app.promptCreateSession()">
+                            <i class="fa-solid fa-plus"></i> + New Lecture Session
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="app.navigate('/admin/dashboard')">
+                            <i class="fa-solid fa-arrow-left"></i> Dashboard
+                        </button>
+                    </div>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 340px; gap:1.5rem;">
+                <div style="display:grid; grid-template-columns:1fr 360px; gap:1.5rem;">
                     <!-- Left: Camera Kiosk Box -->
                     <div class="glass-panel" style="padding:1.5rem;">
                         <!-- Session Selector -->
-                        <div style="margin-bottom:1.25rem; display:flex; gap:1rem; align-items:center;">
-                            <label class="form-label" style="margin:0; white-space:nowrap;">Active Session:</label>
-                            <select id="kiosk-session-select" class="form-control" style="flex:1;">
+                        <div style="margin-bottom:1.25rem; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+                            <label class="form-label" style="margin:0; white-space:nowrap;"><i class="fa-solid fa-chalkboard-user"></i> Active Session:</label>
+                            <select id="kiosk-session-select" class="form-control" style="flex:1; min-width:200px;">
                                 ${sessions.length > 0 ? sessions.map(s => `
                                     <option value="${s.id}">${s.subject_code} - ${s.session_name} (${s.class_name} ${s.division})</option>
-                                `).join("") : `<option value="">-- No Active Session (Create one in Sessions) --</option>`}
+                                `).join("") : `<option value="">-- No Active Session (Click '+ Start Session' to open) --</option>`}
                             </select>
+                            ${sessions.length > 0 ? `
+                                <button class="btn btn-warning btn-sm" id="btn-reset-current-session" title="Reset all attendance for this active session" onclick="app.handleResetCurrentScannerSession()" style="white-space:nowrap;">
+                                    <i class="fa-solid fa-rotate-left"></i> Reset Session
+                                </button>
+                                <button class="btn btn-secondary btn-sm" id="btn-view-current-session" title="View attendees & active student data for this session" onclick="app.viewCurrentScannerSessionData()" style="white-space:nowrap;">
+                                    <i class="fa-solid fa-table-list"></i> View Data
+                                </button>
+                                <button class="btn btn-outline btn-sm" id="btn-close-current-session" title="End / Close this lecture session" onclick="app.handleCloseCurrentScannerSession()" style="white-space:nowrap;">
+                                    <i class="fa-solid fa-lock"></i> End Session
+                                </button>
+                                <button class="btn btn-danger btn-sm" id="btn-delete-current-session" title="Delete / Remove this session" onclick="app.handleDeleteCurrentScannerSession()" style="white-space:nowrap; padding: 0.45rem 0.65rem;">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary btn-sm" onclick="app.quickStartTodaySession()" style="white-space:nowrap;">
+                                    <i class="fa-solid fa-bolt"></i> + Start Session
+                                </button>
+                            `}
                         </div>
+
+                        ${sessions.length === 0 ? `
+                            <div style="margin-bottom:1rem; padding:0.65rem 1rem; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:var(--radius-md); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                                <span style="color:#f59e0b; font-size:0.85rem;"><i class="fa-solid fa-triangle-exclamation"></i> No active lecture session is currently open. Click <strong>'+ Start Session'</strong> to start taking attendance.</span>
+                                <button class="btn btn-warning btn-sm" onclick="app.quickStartTodaySession()"><i class="fa-solid fa-bolt"></i> Quick Open Session</button>
+                            </div>
+                        ` : ''}
 
                         <!-- Live Video Stream -->
                         <div class="camera-scanner-wrapper">
@@ -1527,9 +1560,12 @@ const app = (function () {
 
                     <!-- Right: Live Attendance Ticker / Log -->
                     <div class="glass-panel" style="padding:1.5rem; display:flex; flex-direction:column;">
-                        <h4 style="margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">
-                            <i class="fa-solid fa-bolt" style="color:var(--brand-primary);"></i> Live Attendance Log
-                        </h4>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                            <h4 style="margin:0; display:flex; align-items:center; gap:0.5rem;">
+                                <i class="fa-solid fa-bolt" style="color:var(--brand-primary);"></i> Attendance Log
+                            </h4>
+                            <span id="kiosk-attendance-count-badge" class="status-badge badge-verified" style="font-size:0.75rem;">0 Marked</span>
+                        </div>
                         <div id="kiosk-ticker-list" style="flex:1; overflow-y:auto; max-height:460px; display:flex; flex-direction:column; gap:0.6rem;">
                             <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted); font-size:0.88rem;">
                                 Attendance entries will appear here in real time as faces are verified.
@@ -1544,6 +1580,54 @@ const app = (function () {
             const feedbackEl = document.getElementById("kiosk-recognition-feedback");
             const tickerList = document.getElementById("kiosk-ticker-list");
             const sessionSelect = document.getElementById("kiosk-session-select");
+            const countBadge = document.getElementById("kiosk-attendance-count-badge");
+
+            async function loadSessionAttendance(sessId) {
+                if (!sessId) {
+                    tickerList.innerHTML = `<div style="text-align:center; padding:3rem 1rem; color:var(--text-muted); font-size:0.88rem;">No session active. Create one to start scanning.</div>`;
+                    if (countBadge) countBadge.innerText = "0 Marked";
+                    return;
+                }
+                try {
+                    const recRes = await api.getAttendanceRecords({ session_id: sessId });
+                    const records = recRes.records || [];
+                    if (countBadge) countBadge.innerText = `${records.length} Marked`;
+
+                    if (records.length === 0) {
+                        tickerList.innerHTML = `<div style="text-align:center; padding:3rem 1rem; color:var(--text-muted); font-size:0.88rem;">No students marked present yet for this session. Look into the camera to mark attendance.</div>`;
+                    } else {
+                        tickerList.innerHTML = records.map(r => `
+                            <div class="glass-card" style="padding:0.75rem 1rem; border-left:3px solid var(--status-verified);">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <strong>${r.student_name}</strong>
+                                    <span class="status-badge badge-verified" style="font-size:0.7rem;">PRESENT</span>
+                                </div>
+                                <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.2rem;">
+                                    Roll: ${r.roll_number} • Match: ${r.recognition_confidence}% • ${r.attendance_time}
+                                </div>
+                            </div>
+                        `).join("");
+                    }
+                } catch (e) {
+                    console.error("Failed to load session attendance records:", e);
+                }
+            }
+
+            // Load initial attendance records for active session
+            if (sessionSelect && sessionSelect.value) {
+                loadSessionAttendance(sessionSelect.value);
+            } else if (sessions.length > 0) {
+                sessionSelect.value = sessions[0].id;
+                loadSessionAttendance(sessions[0].id);
+            }
+
+            // Listen for session switch
+            if (sessionSelect) {
+                sessionSelect.addEventListener("change", () => {
+                    feedbackEl.innerHTML = `<span style="color:var(--text-secondary);"><i class="fa-solid fa-rotate"></i> Switched session. Ready for scanning...</span>`;
+                    loadSessionAttendance(sessionSelect.value);
+                });
+            }
 
             const camRes = await FaceEngine.startCamera(videoEl, canvasEl);
             if (!camRes.success) {
@@ -1558,10 +1642,16 @@ const app = (function () {
                 lastAnalyzedFace = analysis;
             });
 
-            // Polling recognition loop every 800ms
+            // Polling recognition loop every 750ms
             pendingScanInterval = setInterval(async () => {
-                const sessionId = sessionSelect.value;
-                if (!sessionId || !lastAnalyzedFace || !lastAnalyzedFace.detected || !lastAnalyzedFace.isReady || isMatchingInProgress) {
+                const sessionId = sessionSelect ? sessionSelect.value : null;
+                if (!sessionId) {
+                    if (feedbackEl) {
+                        feedbackEl.innerHTML = `<span style="color:#f59e0b;"><i class="fa-solid fa-triangle-exclamation"></i> Please select or start an active session above to mark attendance.</span>`;
+                    }
+                    return;
+                }
+                if (!lastAnalyzedFace || !lastAnalyzedFace.detected || !lastAnalyzedFace.isReady || isMatchingInProgress) {
                     return;
                 }
 
@@ -1576,7 +1666,7 @@ const app = (function () {
                     if (res.matched) {
                         const st = res.student;
                         if (res.already_marked) {
-                            feedbackEl.innerHTML = `<span style="color:#f59e0b;"><i class="fa-solid fa-circle-info"></i> ${st.name} (Roll: ${st.roll_number}) already marked present.</span>`;
+                            feedbackEl.innerHTML = `<span style="color:#f59e0b;"><i class="fa-solid fa-circle-info"></i> ${st.name} (Roll: ${st.roll_number}) already marked present in this session.</span>`;
                         } else {
                             feedbackEl.innerHTML = `<span style="color:var(--status-verified);"><i class="fa-solid fa-circle-check"></i> Marked present: ${st.name} (${st.confidence}% match)</span>`;
                             playRecognitionChime();
@@ -1597,19 +1687,56 @@ const app = (function () {
                             `;
 
                             // Remove empty placeholder
-                            if (tickerList.innerText.includes("entries will appear")) {
+                            if (tickerList.innerText.includes("entries will appear") || tickerList.innerText.includes("No students marked")) {
                                 tickerList.innerHTML = "";
                             }
                             tickerList.prepend(item);
+
+                            // Update count badge
+                            if (countBadge) {
+                                const currentCount = parseInt(countBadge.innerText) || 0;
+                                countBadge.innerText = `${currentCount + 1} Marked`;
+                            }
                         }
+                    } else {
+                        feedbackEl.innerHTML = `<span style="color:#f59e0b;"><i class="fa-solid fa-eye"></i> ${res.detail || "Scanning face... Ensure face is centered in the frame."}</span>`;
                     }
-                } catch (e) {
-                    console.log("Scanner ping:", e.message);
+                } catch (err) {
+                    console.error("Live attendance recognition error:", err);
                 } finally {
                     isMatchingInProgress = false;
                 }
-            }, 900);
+            }, 750);
 
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function quickStartTodaySession() {
+        try {
+            const subData = await api.getSubjects();
+            const subjects = subData.subjects || [];
+            const subId = subjects.length > 0 ? subjects[0].id : 1;
+            const subCode = subjects.length > 0 ? subjects[0].code : "DBMS";
+            const todayStr = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const startStr = now.toTimeString().slice(0, 5);
+            const endHour = new Date(now.getTime() + 60*60*1000).toTimeString().slice(0, 5);
+
+            const payload = {
+                subject_id: subId,
+                session_name: `${subCode} Regular Lecture`,
+                date: todayStr,
+                start_time: startStr,
+                end_time: endHour,
+                class_name: "TY-CSE",
+                division: "A"
+            };
+
+            const res = await api.createSession(payload);
+            showToast("Active lecture session started!", "success");
+            renderAdminLiveAttendance(document.getElementById("app-viewport"));
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -1637,7 +1764,10 @@ const app = (function () {
         navigate("/admin/live-attendance");
         setTimeout(() => {
             const select = document.getElementById("kiosk-session-select");
-            if (select) select.value = sessionId;
+            if (select && sessionId) {
+                select.value = sessionId;
+                select.dispatchEvent(new Event("change"));
+            }
         }, 300);
     }
 
@@ -1905,8 +2035,12 @@ const app = (function () {
             const [sessData, subData] = await Promise.all([api.getSessions(), api.getSubjects()]);
             const sessions = sessData.sessions || [];
             const subjects = subData.subjects || [];
+            const hasClosedSessions = sessions.some(s => s.status === 'closed');
 
-            const rowsHtml = sessions.length > 0 ? sessions.map(s => `
+            const rowsHtml = sessions.length > 0 ? sessions.map(s => {
+                const safeName = (s.session_name || 'Lecture').replace(/'/g, "\\'");
+                const activeCnt = s.active_attendance_count !== undefined ? s.active_attendance_count : s.attendance_count;
+                return `
                 <tr>
                     <td><strong>${s.subject_code}</strong> (${s.subject_name})</td>
                     <td><strong>${s.session_name}</strong></td>
@@ -1914,21 +2048,49 @@ const app = (function () {
                     <td>${s.start_time} - ${s.end_time}</td>
                     <td>${s.class_name} (${s.division})</td>
                     <td><span class="status-badge ${s.status === 'active' ? 'badge-verified' : 'badge-disabled'}">${s.status}</span></td>
-                    <td><strong style="font-family:var(--font-mono); color:var(--brand-primary);">${s.attendance_count}</strong></td>
                     <td>
-                        <div style="display:flex; gap:0.4rem;">
+                        <strong style="font-family:var(--font-mono); color:var(--status-verified);">${activeCnt} Active</strong>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">(${s.attendance_count} tot)</span>
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:nowrap;">
                             ${s.status === 'active' ? `
-                                <button class="btn btn-primary btn-sm" title="Launch Scanner" onclick="app.launchSessionScanner(${s.id})">
+                                <button class="btn btn-primary btn-sm" title="Launch Live Scanner" onclick="app.launchSessionScanner(${s.id})">
                                     <i class="fa-solid fa-camera"></i>
                                 </button>
-                                <button class="btn btn-secondary btn-sm" title="Close Session" onclick="app.handleCloseSession(${s.id})">
+                                <button class="btn btn-secondary btn-sm" title="View Active Student Data" onclick="app.viewSessionData(${s.id})">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" style="color:#f59e0b;" title="Reset Active Session Attendance" onclick="app.handleResetSession(${s.id}, '${safeName}')">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" title="End / Close Session" onclick="app.handleCloseSession(${s.id})">
                                     <i class="fa-solid fa-lock"></i>
                                 </button>
-                            ` : `<span style="font-size:0.8rem; color:var(--text-muted);">Closed</span>`}
+                                <button class="btn btn-danger btn-sm" title="Remove / Delete Session" onclick="app.handleDeleteSession(${s.id}, '${safeName}')">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary btn-sm" title="Get Data of Active People" onclick="app.viewSessionData(${s.id})">
+                                    <i class="fa-solid fa-chart-pie"></i> Get Data
+                                </button>
+                                <button class="btn btn-secondary btn-sm" title="Download Active Students CSV" onclick="app.exportSessionActiveCsv(${s.id})">
+                                    <i class="fa-solid fa-file-csv"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" title="Re-open Session" onclick="app.handleReopenSession(${s.id})">
+                                    <i class="fa-solid fa-lock-open"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" style="color:#f59e0b;" title="Reset Attendance Records" onclick="app.handleResetSession(${s.id}, '${safeName}')">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm" title="Remove / Delete Session" onclick="app.handleDeleteSession(${s.id}, '${safeName}')">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            `}
                         </div>
                     </td>
                 </tr>
-            `).join("") : `
+            `}).join("") : `
                 <tr>
                     <td colspan="8" style="text-align:center; color:var(--text-muted); padding:3rem;">No sessions created yet.</td>
                 </tr>
@@ -1938,11 +2100,18 @@ const app = (function () {
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
                     <div>
                         <h2>Attendance Sessions</h2>
-                        <p style="color:var(--text-secondary); font-size:0.92rem;">Create lecture sessions and launch live face recognition kiosks.</p>
+                        <p style="color:var(--text-secondary); font-size:0.92rem;">Create, reset, or remove lecture sessions and retrieve active student data from closed sessions.</p>
                     </div>
-                    <button class="btn btn-primary btn-sm" onclick="app.promptCreateSession()">
-                        <i class="fa-solid fa-plus"></i> Start New Lecture Session
-                    </button>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                        ${hasClosedSessions ? `
+                            <button class="btn btn-outline btn-sm" onclick="app.handleCleanupClosedSessions()" title="Remove all closed sessions" style="color:#ef4444; border-color:rgba(239,68,68,0.4);">
+                                <i class="fa-solid fa-broom"></i> Clean Up Closed Sessions
+                            </button>
+                        ` : ''}
+                        <button class="btn btn-primary btn-sm" onclick="app.promptCreateSession()">
+                            <i class="fa-solid fa-plus"></i> Start New Lecture Session
+                        </button>
+                    </div>
                 </div>
 
                 <div class="glass-panel" style="padding:1.5rem;">
@@ -1957,7 +2126,7 @@ const app = (function () {
                                     <th>Class / Div</th>
                                     <th>Status</th>
                                     <th>Attended</th>
-                                    <th>Action</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1974,7 +2143,13 @@ const app = (function () {
         }
     }
 
-    function promptCreateSession() {
+    async function promptCreateSession() {
+        if (!window._availableSubjects || window._availableSubjects.length === 0) {
+            try {
+                const subData = await api.getSubjects();
+                window._availableSubjects = subData.subjects || [];
+            } catch (e) {}
+        }
         const subjects = window._availableSubjects || [];
         const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1984,11 +2159,11 @@ const app = (function () {
                 <div class="form-group">
                     <label class="form-label">Subject</label>
                     <select id="modal-ses-subject" class="form-control">
-                        ${subjects.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join("")}
+                        ${subjects.length > 0 ? subjects.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join("") : `<option value="1">DBMS - Database Management</option>`}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Session Name</label>
+                    <label class="form-label">Session / Lecture Name</label>
                     <input type="text" id="modal-ses-name" class="form-control" value="Regular Lecture" required>
                 </div>
                 <div class="form-row">
@@ -2038,7 +2213,11 @@ const app = (function () {
         try {
             const res = await api.createSession(payload);
             showToast(res.message, "success");
-            renderAdminSessions(document.getElementById("app-viewport"));
+            if (currentRoute === "/admin/live-attendance") {
+                renderAdminLiveAttendance(document.getElementById("app-viewport"));
+            } else {
+                renderAdminSessions(document.getElementById("app-viewport"));
+            }
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -2054,6 +2233,308 @@ const app = (function () {
         }
     }
 
+    async function handleReopenSession(id) {
+        try {
+            const res = await api.reopenSession(id);
+            showToast(res.message, "success");
+            renderAdminSessions(document.getElementById("app-viewport"));
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleResetSession(id, sessionName) {
+        if (!confirm(`Are you sure you want to reset attendance for session '${sessionName || 'this session'}'? This will clear all attendance records and allow attendance to be re-taken.`)) return;
+        try {
+            const res = await api.resetSession(id);
+            showToast(res.message, "info");
+            if (currentRoute === "/admin/live-attendance") {
+                renderAdminLiveAttendance(document.getElementById("app-viewport"));
+            } else {
+                renderAdminSessions(document.getElementById("app-viewport"));
+            }
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleDeleteSession(id, sessionName) {
+        if (!confirm(`Are you sure you want to permanently remove session '${sessionName || 'this session'}' and all its attendance records? This action cannot be undone.`)) return;
+        try {
+            const res = await api.deleteSession(id);
+            showToast(res.message, "success");
+            if (currentRoute === "/admin/live-attendance") {
+                renderAdminLiveAttendance(document.getElementById("app-viewport"));
+            } else {
+                renderAdminSessions(document.getElementById("app-viewport"));
+            }
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleCleanupClosedSessions() {
+        if (!confirm("Are you sure you want to permanently delete all closed attendance sessions and their records?")) return;
+        try {
+            const res = await api.cleanupClosedSessions();
+            showToast(res.message, "success");
+            renderAdminSessions(document.getElementById("app-viewport"));
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleCloseCurrentScannerSession() {
+        const select = document.getElementById("kiosk-session-select");
+        if (!select || !select.value) {
+            return showToast("No active lecture session selected to close.", "warning");
+        }
+        try {
+            const res = await api.closeSession(parseInt(select.value));
+            showToast(res.message, "info");
+            renderAdminLiveAttendance(document.getElementById("app-viewport"));
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleResetCurrentScannerSession() {
+        const select = document.getElementById("kiosk-session-select");
+        if (!select || !select.value) {
+            return showToast("No active lecture session selected to reset.", "warning");
+        }
+        const sessId = parseInt(select.value);
+        if (!confirm("Are you sure you want to reset this active session? All marked attendance records for this session will be cleared and reset to 0.")) return;
+        try {
+            const res = await api.resetSession(sessId);
+            showToast(res.message, "info");
+            const tickerList = document.getElementById("kiosk-ticker-list");
+            const countBadge = document.getElementById("kiosk-attendance-count-badge");
+            if (tickerList) tickerList.innerHTML = `<div style="text-align:center; padding:3rem 1rem; color:var(--text-muted); font-size:0.88rem;">Session reset. Ready to scan attendance.</div>`;
+            if (countBadge) countBadge.innerText = "0 Marked";
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleDeleteCurrentScannerSession() {
+        const select = document.getElementById("kiosk-session-select");
+        if (!select || !select.value) {
+            return showToast("No active lecture session selected to delete.", "warning");
+        }
+        const sessId = parseInt(select.value);
+        if (!confirm("Are you sure you want to remove this attendance session? All records will be permanently deleted.")) return;
+        try {
+            const res = await api.deleteSession(sessId);
+            showToast(res.message, "success");
+            renderAdminLiveAttendance(document.getElementById("app-viewport"));
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function viewCurrentScannerSessionData() {
+        const select = document.getElementById("kiosk-session-select");
+        if (!select || !select.value) {
+            return showToast("No active session selected.", "warning");
+        }
+        viewSessionData(parseInt(select.value));
+    }
+
+    function exportSessionActiveCsv(sessionId) {
+        window.open(`/api/attendance/export/csv?session_id=${sessionId}&account_status=active`, "_blank");
+    }
+
+    /* ==========================================================================
+       VIEW: Session Data & Active Attendees Modal
+       ========================================================================== */
+    async function viewSessionData(sessionId) {
+        showModal(
+            "Session Attendee Data",
+            `
+                <div class="loading-state" style="padding:2rem;">
+                    <div class="scanner-spinner"></div>
+                    <p>Loading session data...</p>
+                </div>
+            `,
+            `<button class="btn btn-secondary btn-sm" onclick="app.closeModal()">Close</button>`,
+            "900px"
+        );
+
+        try {
+            const res = await api.getSessionAttendees(sessionId);
+            const ses = res.session;
+            const metrics = res.metrics;
+            const records = res.records || [];
+            const safeName = (ses.session_name || 'Session').replace(/'/g, "\\'");
+
+            const renderTable = (filterStatus = "active", searchQuery = "") => {
+                let filtered = records;
+                if (filterStatus === "active") {
+                    filtered = filtered.filter(r => (r.student_account_status || 'active') === 'active');
+                } else if (filterStatus === "disabled") {
+                    filtered = filtered.filter(r => (r.student_account_status || 'active') === 'disabled');
+                }
+
+                if (searchQuery.trim()) {
+                    const q = searchQuery.toLowerCase().trim();
+                    filtered = filtered.filter(r => 
+                        (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+                        (r.roll_number && r.roll_number.toLowerCase().includes(q)) ||
+                        (r.student_email && r.student_email.toLowerCase().includes(q))
+                    );
+                }
+
+                if (filtered.length === 0) {
+                    return `<tr><td colspan="7" style="text-align:center; padding:2.5rem; color:var(--text-muted);">No attendance entries match the current filter.</td></tr>`;
+                }
+
+                return filtered.map(r => `
+                    <tr>
+                        <td><strong>${r.roll_number}</strong></td>
+                        <td>
+                            <strong>${r.student_name}</strong>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">${r.student_email || ''}</div>
+                        </td>
+                        <td>${r.class_name} (${r.division})</td>
+                        <td>
+                            <span class="status-badge ${r.student_account_status === 'active' ? 'badge-verified' : 'badge-disabled'}">
+                                ${r.student_account_status || 'active'}
+                            </span>
+                        </td>
+                        <td>${r.attendance_time}</td>
+                        <td><span style="font-family:var(--font-mono); color:var(--brand-primary);">${r.recognition_confidence}%</span></td>
+                        <td><span class="status-badge badge-verified">PRESENT</span></td>
+                    </tr>
+                `).join("");
+            };
+
+            const bodyHtml = `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.25rem; flex-wrap:wrap; gap:1rem;">
+                    <div>
+                        <div style="font-size:1.15rem; font-weight:700; color:var(--text-primary); margin-bottom:0.2rem;">
+                            ${ses.subject_code} — ${ses.session_name}
+                        </div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">
+                            ${ses.subject_name} • ${ses.class_name} (${ses.division}) • ${ses.date} (${ses.start_time} - ${ses.end_time})
+                        </div>
+                    </div>
+                    <span class="status-badge ${ses.status === 'active' ? 'badge-verified' : 'badge-disabled'}" style="font-size:0.85rem; padding:0.3rem 0.8rem;">
+                        ${ses.status.toUpperCase()} SESSION
+                    </span>
+                </div>
+
+                <!-- Metric stats cards -->
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:0.75rem; margin-bottom:1.25rem;">
+                    <div class="glass-card" style="padding:0.75rem 1rem; border-left:3px solid var(--status-verified);">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Active Students</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:var(--status-verified);">${metrics.active_attendees}</div>
+                    </div>
+                    <div class="glass-card" style="padding:0.75rem 1rem; border-left:3px solid var(--brand-primary);">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Total Present</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:var(--brand-primary);">${metrics.total_attendees}</div>
+                    </div>
+                    <div class="glass-card" style="padding:0.75rem 1rem; border-left:3px solid #94a3b8;">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Disabled Accounts</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:var(--text-secondary);">${metrics.disabled_attendees}</div>
+                    </div>
+                </div>
+
+                <!-- Filter and Action Bar -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem; background:rgba(15,23,42,0.6); padding:0.75rem 1rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <button id="filter-btn-active" class="btn btn-sm btn-primary" style="font-size:0.78rem;">
+                            <i class="fa-solid fa-user-check"></i> Active Students (${metrics.active_attendees})
+                        </button>
+                        <button id="filter-btn-all" class="btn btn-sm btn-secondary" style="font-size:0.78rem;">
+                            <i class="fa-solid fa-users"></i> All (${metrics.total_attendees})
+                        </button>
+                    </div>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <input type="text" id="session-modal-search" class="form-control" placeholder="Search student or roll..." style="font-size:0.8rem; padding:0.35rem 0.75rem; width:180px;">
+                        <a href="/api/attendance/export/csv?session_id=${sessionId}&account_status=active" target="_blank" class="btn btn-success btn-sm" title="Download active students CSV">
+                            <i class="fa-solid fa-download"></i> Active CSV
+                        </a>
+                        <a href="/api/attendance/export/csv?session_id=${sessionId}" target="_blank" class="btn btn-secondary btn-sm" title="Download all attendance CSV">
+                            <i class="fa-solid fa-file-csv"></i> All CSV
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Attendees Table -->
+                <div class="table-responsive" style="max-height:340px; overflow-y:auto;">
+                    <table class="custom-table" style="font-size:0.85rem;">
+                        <thead>
+                            <tr>
+                                <th>Roll No</th>
+                                <th>Student</th>
+                                <th>Class</th>
+                                <th>Account</th>
+                                <th>Time</th>
+                                <th>Confidence</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="session-modal-table-body">
+                            ${renderTable("active", "")}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            const footerHtml = `
+                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn btn-danger btn-sm" onclick="app.closeModal(); app.handleDeleteSession(${sessionId}, '${safeName}');">
+                            <i class="fa-solid fa-trash"></i> Remove Session
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="app.closeModal(); app.handleResetSession(${sessionId}, '${safeName}');">
+                            <i class="fa-solid fa-rotate-left"></i> Reset Attendance
+                        </button>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="app.closeModal()">Close</button>
+                </div>
+            `;
+
+            showModal(`Session Data — ${ses.session_name}`, bodyHtml, footerHtml, "900px");
+
+            // Attach interactive listeners for the modal
+            let currentFilter = "active";
+            const tableBody = document.getElementById("session-modal-table-body");
+            const searchInput = document.getElementById("session-modal-search");
+            const btnActive = document.getElementById("filter-btn-active");
+            const btnAll = document.getElementById("filter-btn-all");
+
+            const updateView = () => {
+                if (tableBody) {
+                    tableBody.innerHTML = renderTable(currentFilter, searchInput ? searchInput.value : "");
+                }
+            };
+
+            if (btnActive && btnAll) {
+                btnActive.addEventListener("click", () => {
+                    currentFilter = "active";
+                    btnActive.className = "btn btn-sm btn-primary";
+                    btnAll.className = "btn btn-sm btn-secondary";
+                    updateView();
+                });
+                btnAll.addEventListener("click", () => {
+                    currentFilter = "all";
+                    btnAll.className = "btn btn-sm btn-primary";
+                    btnActive.className = "btn btn-sm btn-secondary";
+                    updateView();
+                });
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener("input", updateView);
+            }
+
+        } catch (err) {
+            showModal("Error", `<p style="color:#ef4444;">${err.message}</p>`, `<button class="btn btn-secondary btn-sm" onclick="app.closeModal()">Close</button>`);
+        }
+    }
+
     /* ==========================================================================
        VIEW: Admin Reports (/admin/reports)
        ========================================================================== */
@@ -2061,63 +2542,193 @@ const app = (function () {
         container.innerHTML = `
             <div class="loading-state">
                 <div class="scanner-spinner"></div>
-                <p>Generating reports...</p>
+                <p>Generating reports & analytics...</p>
             </div>
         `;
 
         try {
-            const data = await api.getAttendanceRecords();
-            const records = data.records || [];
+            const [subData, sessData, recData] = await Promise.all([
+                api.getSubjects(),
+                api.getSessions(),
+                api.getAttendanceRecords()
+            ]);
 
-            const rowsHtml = records.map(r => `
-                <tr>
-                    <td><strong>${r.roll_number}</strong></td>
-                    <td>${r.student_name}</td>
-                    <td>${r.subject_code}</td>
-                    <td>${r.attendance_date}</td>
-                    <td>${r.attendance_time}</td>
-                    <td><span class="status-badge badge-verified">${r.status}</span></td>
-                    <td><span style="font-family:var(--font-mono); color:var(--brand-primary);">${r.recognition_confidence ? r.recognition_confidence + '%' : '100%'}</span></td>
-                </tr>
-            `).join("");
+            const subjects = subData.subjects || [];
+            const sessions = sessData.sessions || [];
+            const records = recData.records || [];
 
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
                     <div>
                         <h2>Attendance Reports & Export</h2>
-                        <p style="color:var(--text-secondary); font-size:0.92rem;">Audit-grade logs with one-click CSV export.</p>
+                        <p style="color:var(--text-secondary); font-size:0.92rem;">Audit and download class attendance records by subject, session (active or closed), and student status.</p>
                     </div>
-                    <div style="display:flex; gap:0.75rem;">
-                        <a href="/api/attendance/export/csv" class="btn btn-success btn-sm" download>
-                            <i class="fa-solid fa-file-csv"></i> Export to CSV
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <a id="btn-export-active-csv" href="/api/attendance/export/csv?account_status=active" target="_blank" class="btn btn-success btn-sm">
+                            <i class="fa-solid fa-file-arrow-down"></i> Export Active Students CSV
                         </a>
-                        <button class="btn btn-secondary btn-sm" onclick="app.navigate('/admin/dashboard')">
-                            <i class="fa-solid fa-arrow-left"></i> Dashboard
+                        <a id="btn-export-full-csv" href="/api/attendance/export/csv" target="_blank" class="btn btn-secondary btn-sm">
+                            <i class="fa-solid fa-file-csv"></i> Export Full CSV
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="glass-panel" style="padding:1.25rem; margin-bottom:1.5rem;">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; align-items:flex-end;">
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Subject</label>
+                            <select id="report-filter-subject" class="form-control">
+                                <option value="">-- All Subjects --</option>
+                                ${subjects.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join("")}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Session</label>
+                            <select id="report-filter-session" class="form-control">
+                                <option value="">-- All Sessions --</option>
+                                ${sessions.map(s => `<option value="${s.id}">${s.subject_code} - ${s.session_name} (${s.date}) [${s.status.toUpperCase()}]</option>`).join("")}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Account Status</label>
+                            <select id="report-filter-account-status" class="form-control">
+                                <option value="">-- All Accounts --</option>
+                                <option value="active" selected>Active Students Only</option>
+                                <option value="disabled">Disabled Accounts Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Date</label>
+                            <input type="date" id="report-filter-date" class="form-control">
+                        </div>
+                        <button class="btn btn-primary" id="btn-apply-report-filter" style="height:42px;">
+                            <i class="fa-solid fa-filter"></i> Apply Filter
                         </button>
                     </div>
                 </div>
 
+                <!-- Records Table -->
                 <div class="glass-panel" style="padding:1.5rem;">
                     <div class="table-responsive">
-                        <table class="custom-table">
+                        <table class="custom-table" id="report-table">
                             <thead>
                                 <tr>
-                                    <th>Roll No</th>
-                                    <th>Student Name</th>
-                                    <th>Subject</th>
-                                    <th>Date</th>
-                                    <th>Time</th>
+                                    <th>Date & Time</th>
+                                    <th>Student</th>
+                                    <th>Roll Number</th>
+                                    <th>Class / Div</th>
+                                    <th>Account</th>
+                                    <th>Subject & Session</th>
+                                    <th>AI Confidence</th>
                                     <th>Status</th>
-                                    <th>Match Confidence</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                ${rowsHtml}
+                            <tbody id="report-table-body">
+                                ${records.length > 0 ? records.map(r => `
+                                    <tr>
+                                        <td>${r.attendance_date} <span style="font-size:0.8rem; color:var(--text-muted);">${r.attendance_time}</span></td>
+                                        <td>
+                                            <strong>${r.student_name}</strong>
+                                            <div style="font-size:0.75rem; color:var(--text-muted);">${r.student_email || ''}</div>
+                                        </td>
+                                        <td><code style="color:var(--brand-primary);">${r.roll_number}</code></td>
+                                        <td>${r.class_name} (${r.division})</td>
+                                        <td>
+                                            <span class="status-badge ${r.student_account_status === 'active' ? 'badge-verified' : 'badge-disabled'}">
+                                                ${r.student_account_status || 'active'}
+                                            </span>
+                                        </td>
+                                        <td><strong>${r.subject_code}</strong> <span style="font-size:0.8rem; color:var(--text-secondary);">(${r.session_name || 'Regular'})</span></td>
+                                        <td>${r.recognition_confidence}% (Liveness: ${r.liveness_score})</td>
+                                        <td><span class="status-badge badge-verified">PRESENT</span></td>
+                                    </tr>
+                                `).join("") : `
+                                    <tr>
+                                        <td colspan="8" style="text-align:center; color:var(--text-muted); padding:3rem;">No attendance records found.</td>
+                                    </tr>
+                                `}
                             </tbody>
                         </table>
                     </div>
                 </div>
             `;
+
+            const updateExportUrls = () => {
+                const subId = document.getElementById("report-filter-subject").value;
+                const sessId = document.getElementById("report-filter-session").value;
+                const accStatus = document.getElementById("report-filter-account-status").value;
+                const dt = document.getElementById("report-filter-date").value;
+
+                const params = new URLSearchParams();
+                if (subId) params.append("subject_id", subId);
+                if (sessId) params.append("session_id", sessId);
+                if (dt) {
+                    params.append("date_from", dt);
+                    params.append("date_to", dt);
+                }
+
+                const fullParams = new URLSearchParams(params);
+                if (accStatus) fullParams.append("account_status", accStatus);
+
+                const activeParams = new URLSearchParams(params);
+                activeParams.append("account_status", "active");
+
+                const btnFull = document.getElementById("btn-export-full-csv");
+                const btnActive = document.getElementById("btn-export-active-csv");
+                if (btnFull) btnFull.href = `/api/attendance/export/csv?${fullParams.toString()}`;
+                if (btnActive) btnActive.href = `/api/attendance/export/csv?${activeParams.toString()}`;
+            };
+
+            document.getElementById("btn-apply-report-filter").addEventListener("click", async () => {
+                const subId = document.getElementById("report-filter-subject").value;
+                const sessId = document.getElementById("report-filter-session").value;
+                const accStatus = document.getElementById("report-filter-account-status").value;
+                const dt = document.getElementById("report-filter-date").value;
+
+                const params = {};
+                if (subId) params.subject_id = subId;
+                if (sessId) params.session_id = sessId;
+                if (accStatus) params.account_status = accStatus;
+                if (dt) {
+                    params.date_from = dt;
+                    params.date_to = dt;
+                }
+
+                updateExportUrls();
+
+                try {
+                    const filtered = await api.getAttendanceRecords(params);
+                    const list = filtered.records || [];
+                    const tbody = document.getElementById("report-table-body");
+                    if (list.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:3rem;">No records matched your filter.</td></tr>`;
+                    } else {
+                        tbody.innerHTML = list.map(r => `
+                            <tr>
+                                <td>${r.attendance_date} <span style="font-size:0.8rem; color:var(--text-muted);">${r.attendance_time}</span></td>
+                                <td>
+                                    <strong>${r.student_name}</strong>
+                                    <div style="font-size:0.75rem; color:var(--text-muted);">${r.student_email || ''}</div>
+                                </td>
+                                <td><code style="color:var(--brand-primary);">${r.roll_number}</code></td>
+                                <td>${r.class_name} (${r.division})</td>
+                                <td>
+                                    <span class="status-badge ${r.student_account_status === 'active' ? 'badge-verified' : 'badge-disabled'}">
+                                        ${r.student_account_status || 'active'}
+                                    </span>
+                                </td>
+                                <td><strong>${r.subject_code}</strong> <span style="font-size:0.8rem; color:var(--text-secondary);">(${r.session_name || 'Regular'})</span></td>
+                                <td>${r.recognition_confidence}% (Liveness: ${r.liveness_score})</td>
+                                <td><span class="status-badge badge-verified">PRESENT</span></td>
+                            </tr>
+                        `).join("");
+                    }
+                } catch (e) {
+                    showToast(e.message, "error");
+                }
+            });
+
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -2130,7 +2741,7 @@ const app = (function () {
         container.innerHTML = `
             <div class="loading-state">
                 <div class="scanner-spinner"></div>
-                <p>Loading security audit logs...</p>
+                <p>Loading security audit trails...</p>
             </div>
         `;
 
@@ -2138,24 +2749,12 @@ const app = (function () {
             const data = await api.getAuditLogs();
             const logs = data.logs || [];
 
-            const rowsHtml = logs.map(l => `
-                <tr>
-                    <td><span class="user-role-tag" style="background:rgba(56,189,248,0.15);">${l.action}</span></td>
-                    <td>${l.details}</td>
-                    <td style="font-family:var(--font-mono); font-size:0.85rem;">${l.ip_address || "127.0.0.1"}</td>
-                    <td style="font-size:0.84rem; color:var(--text-muted);">${l.timestamp}</td>
-                </tr>
-            `).join("");
-
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
                     <div>
                         <h2>System Audit Logs</h2>
-                        <p style="color:var(--text-secondary); font-size:0.92rem;">Immutable chronological record of logins, biometric submissions, approvals, and attendance events.</p>
+                        <p style="color:var(--text-secondary); font-size:0.92rem;">Immutable event trail of administrative and security events.</p>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="app.navigate('/admin/dashboard')">
-                        <i class="fa-solid fa-arrow-left"></i> Dashboard
-                    </button>
                 </div>
 
                 <div class="glass-panel" style="padding:1.5rem;">
@@ -2163,14 +2762,27 @@ const app = (function () {
                         <table class="custom-table">
                             <thead>
                                 <tr>
-                                    <th>Event Type</th>
-                                    <th>Description</th>
-                                    <th>Client IP</th>
                                     <th>Timestamp</th>
+                                    <th>Action Type</th>
+                                    <th>Description</th>
+                                    <th>User</th>
+                                    <th>IP Address</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${rowsHtml}
+                                ${logs.length > 0 ? logs.map(l => `
+                                    <tr>
+                                        <td style="white-space:nowrap; font-size:0.85rem; color:var(--text-secondary);">${l.created_at}</td>
+                                        <td><span class="status-badge badge-verified" style="font-family:var(--font-mono); font-size:0.75rem;">${l.action_type}</span></td>
+                                        <td>${l.details}</td>
+                                        <td><strong>${l.user_email || "System"}</strong></td>
+                                        <td><code style="font-size:0.78rem;">${l.ip_address || "127.0.0.1"}</code></td>
+                                    </tr>
+                                `).join("") : `
+                                    <tr>
+                                        <td colspan="5" style="text-align:center; color:var(--text-muted); padding:3rem;">No audit logs registered yet.</td>
+                                    </tr>
+                                `}
                             </tbody>
                         </table>
                     </div>
@@ -2182,13 +2794,13 @@ const app = (function () {
     }
 
     /* ==========================================================================
-       VIEW: Admin Security Settings (/admin/settings/security)
+       VIEW: Admin Security Settings (/admin/settings)
        ========================================================================== */
-    async function renderAdminSecurity(container) {
+    async function renderAdminSettings(container) {
         container.innerHTML = `
             <div class="loading-state">
                 <div class="scanner-spinner"></div>
-                <p>Loading security settings...</p>
+                <p>Loading security configuration...</p>
             </div>
         `;
 
@@ -2250,7 +2862,7 @@ const app = (function () {
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Institution Name</label>
-                                <input type="text" id="setting-inst" class="form-control" value="${settings.college_name || 'National Institute of Technology & Engineering'}">
+                                <input type="text" id="setting-inst" class="form-control" value="${settings.college_name || 'BioScan AI Institute of Technology'}">
                             </div>
                             <button type="submit" class="btn btn-secondary" style="width:100%; margin-top:1rem;">
                                 <i class="fa-solid fa-floppy-disk"></i> Save System Settings
@@ -2320,7 +2932,18 @@ const app = (function () {
         deleteSubjectItem,
         promptCreateSession,
         confirmCreateSession,
-        handleCloseSession
+        handleCloseSession,
+        handleReopenSession,
+        handleResetSession,
+        handleDeleteSession,
+        handleCleanupClosedSessions,
+        handleCloseCurrentScannerSession,
+        handleResetCurrentScannerSession,
+        handleDeleteCurrentScannerSession,
+        viewCurrentScannerSessionData,
+        viewSessionData,
+        exportSessionActiveCsv,
+        quickStartTodaySession
     };
 })();
 

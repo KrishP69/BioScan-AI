@@ -18,16 +18,39 @@ const FaceEngine = (function () {
         videoElement = videoEl;
         canvasOverlay = canvasEl;
 
-        try {
-            activeStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
-                    facingMode: "user"
-                },
-                audio: false
-            });
+        const constraintOptions = [
+            { video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false },
+            { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+            { video: true, audio: false }
+        ];
 
+        let lastErr = null;
+        for (const constraints of constraintOptions) {
+            try {
+                activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+                break;
+            } catch (err) {
+                lastErr = err;
+                console.warn("Camera attempt with constraints", constraints, "failed:", err);
+            }
+        }
+
+        if (!activeStream) {
+            console.error("Camera access failed all attempts:", lastErr);
+            let userMsg = "Unable to access webcam: " + (lastErr ? lastErr.message : "Unknown error");
+            if (lastErr) {
+                if (lastErr.name === "NotAllowedError" || lastErr.name === "PermissionDeniedError") {
+                    userMsg = "Camera permission denied. Please click the icon in your browser URL bar and allow Camera access.";
+                } else if (lastErr.name === "NotReadableError" || lastErr.name === "TrackStartError" || (lastErr.message && lastErr.message.includes("video source"))) {
+                    userMsg = "Camera is in use by another application (Zoom, Teams, Discord, Windows Camera app, or another browser tab) or blocked by Windows Camera Privacy Settings.";
+                } else if (lastErr.name === "NotFoundError" || lastErr.name === "DevicesNotFoundError") {
+                    userMsg = "No webcam device detected. Please connect a camera and refresh the page.";
+                }
+            }
+            return { success: false, error: userMsg };
+        }
+
+        try {
             videoElement.srcObject = activeStream;
             await videoElement.play();
 
@@ -37,13 +60,11 @@ const FaceEngine = (function () {
             }
 
             return { success: true };
-        } catch (err) {
-            console.error("Camera access error:", err);
+        } catch (playErr) {
+            console.error("Error playing video stream:", playErr);
             return {
                 success: false,
-                error: err.name === "NotAllowedError"
-                    ? "Camera permission denied. Please enable camera access in your browser."
-                    : "Unable to access webcam: " + err.message
+                error: "Camera connected, but video playback failed: " + playErr.message
             };
         }
     }
