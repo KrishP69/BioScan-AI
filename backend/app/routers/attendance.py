@@ -283,7 +283,7 @@ def recognize_face_and_mark_attendance(
         cursor = conn.cursor()
         cursor.execute("SELECT value FROM system_settings WHERE key = 'similarity_threshold'")
         sim_row = cursor.fetchone()
-        dist_threshold = float(sim_row["value"]) if sim_row else 0.55
+        dist_threshold = float(sim_row["value"]) if sim_row else 0.50
         
         cursor.execute("SELECT value FROM system_settings WHERE key = 'liveness_threshold'")
         live_row = cursor.fetchone()
@@ -504,3 +504,74 @@ def export_attendance_csv(
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename_prefix}_report_{date.today().isoformat()}.csv"}
         )
+
+@router.get("/day-wise")
+def get_admin_day_wise_attendance(
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Returns day-wise lecture and attendance summaries for administrator dashboard and reports.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ses.id as session_id, ses.session_name, ses.date, ses.start_time, ses.end_time,
+                   ses.class_name, ses.division, ses.status as session_status,
+                   sub.code as subject_code, sub.name as subject_name,
+                   (SELECT COUNT(*) FROM attendance_records ar JOIN students st ON ar.student_id = st.id WHERE ar.session_id = ses.id AND st.account_status = 'active') as attended_count,
+                   (SELECT COUNT(*) FROM students st WHERE st.account_status = 'active') as total_active_students
+            FROM attendance_sessions ses
+            JOIN subjects sub ON ses.subject_id = sub.id
+            ORDER BY ses.date DESC, ses.start_time DESC
+        """)
+        rows = cursor.fetchall()
+        
+        days_map = {}
+        for r in rows:
+            d_str = r["date"]
+            if d_str not in days_map:
+                try:
+                    dt = datetime.strptime(d_str, "%Y-%m-%d")
+                    day_name = dt.strftime("%A")
+                except Exception:
+                    day_name = "Day"
+                days_map[d_str] = {
+                    "date": d_str,
+                    "day_name": day_name,
+                    "total_sessions": 0,
+                    "total_attendances": 0,
+                    "sessions": []
+                }
+            
+            tot_st = r["total_active_students"] or 1
+            att_cnt = r["attended_count"] or 0
+            rate = round((att_cnt / tot_st * 100.0), 1) if tot_st > 0 else 0.0
+            
+            days_map[d_str]["total_sessions"] += 1
+            days_map[d_str]["total_attendances"] += att_cnt
+            
+            days_map[d_str]["sessions"].append({
+                "session_id": r["session_id"],
+                "subject_code": r["subject_code"],
+                "subject_name": r["subject_name"],
+                "session_name": r["session_name"],
+                "start_time": r["start_time"],
+                "end_time": r["end_time"],
+                "class_name": r["class_name"],
+                "division": r["division"],
+                "session_status": r["session_status"],
+                "attended_count": att_cnt,
+                "total_students": tot_st,
+                "attendance_rate": rate
+            })
+            
+        day_wise_list = []
+        for d_str, d_val in days_map.items():
+            tot_sess = d_val["total_sessions"]
+            day_wise_list.append(d_val)
+            
+        return {
+            "success": True,
+            "days": day_wise_list,
+            "total_days": len(day_wise_list)
+        }

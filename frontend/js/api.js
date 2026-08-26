@@ -101,7 +101,13 @@ const api = (function () {
         // Student
         getStudentDashboard: () => request("/api/student/dashboard", { method: "GET" }),
         submitFaceRegistration: (data) => request("/api/student/face-register", { method: "POST", body: JSON.stringify(data) }),
-        getStudentAttendance: (subjectId) => request(`/api/student/attendance${subjectId ? '?subject_id=' + subjectId : ''}`, { method: "GET" }),
+        getStudentAttendance: (params = {}) => {
+            if (typeof params === 'number' || typeof params === 'string') {
+                params = { subject_id: params };
+            }
+            const query = new URLSearchParams(params).toString();
+            return request(`/api/student/attendance${query ? '?' + query : ''}`, { method: "GET" });
+        },
 
         // Admin
         getAdminDashboard: () => request("/api/admin/dashboard", { method: "GET" }),
@@ -114,6 +120,8 @@ const api = (function () {
         },
         updateStudentStatus: (id, status) => request(`/api/admin/students/${id}/status`, { method: "PUT", body: JSON.stringify({ account_status: status }) }),
         resetStudentFace: (id) => request(`/api/admin/students/${id}/reset-face`, { method: "POST" }),
+        resetStudentAttendanceAdmin: (id) => request(`/api/admin/students/${id}/reset-attendance`, { method: "POST" }),
+        resetAllAttendanceAdmin: () => request("/api/admin/attendance/reset-all", { method: "POST" }),
         deleteStudent: (id) => request(`/api/admin/students/${id}`, { method: "DELETE" }),
         getAuditLogs: () => request("/api/admin/audit-logs", { method: "GET" }),
         changeAdminPassword: (data) => request("/api/admin/settings/password", { method: "POST", body: JSON.stringify(data) }),

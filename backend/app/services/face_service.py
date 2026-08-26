@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from app.database import get_db
 
 def normalize_vector(v: List[float]) -> np.ndarray:
@@ -22,12 +22,12 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
 
 def find_matching_student(
     query_embedding: List[float],
-    distance_threshold: float = 0.65,
+    distance_threshold: float = 0.50,
     liveness_score: float = 1.0
 ) -> Optional[Dict[str, Any]]:
     """
-    Matches a query embedding against all verified student face profiles.
-    Uses normalized cosine similarity and euclidean distance for robust recognition.
+    Matches a 128-d query face embedding against all verified active student face profiles.
+    Uses normalized Euclidean distance and Cosine similarity for high-precision biometric matching.
     """
     if not query_embedding or len(query_embedding) < 32:
         return None
@@ -45,12 +45,12 @@ def find_matching_student(
         """)
         profiles = cursor.fetchall()
         
+        if not profiles:
+            return None
+
         best_match = None
         min_distance = float("inf")
-        max_cos_sim = -1.0
-
-        # Allowed threshold - if user passed a strict threshold, allow robust window (up to 0.70)
-        eff_threshold = max(0.68, distance_threshold)
+        best_cos_sim = -1.0
 
         for row in profiles:
             try:
@@ -58,22 +58,24 @@ def find_matching_student(
                 stored_embedding = json.loads(raw_emb) if isinstance(raw_emb, str) else raw_emb
                 stored_norm = normalize_vector(stored_embedding)
 
-                cos_sim = float(np.dot(query_norm, stored_norm))
+                # Compute Euclidean distance and Cosine similarity
                 dist = float(np.linalg.norm(query_norm - stored_norm))
+                cos_sim = float(np.dot(query_norm, stored_norm))
 
-                # Track best match (highest cosine similarity / lowest distance)
-                if dist < min_distance or cos_sim > max_cos_sim:
-                    if dist < min_distance:
-                        min_distance = dist
-                    if cos_sim > max_cos_sim:
-                        max_cos_sim = cos_sim
+                # Track best candidate by minimum Euclidean distance
+                if dist < min_distance:
+                    min_distance = dist
+                    best_cos_sim = cos_sim
                     best_match = row
             except Exception:
                 continue
 
-        # Match condition: distance <= threshold OR cosine_sim >= 0.72
-        if best_match and (min_distance <= eff_threshold or max_cos_sim >= 0.72):
-            confidence = round(max(60.0, min(99.9, ((max_cos_sim + 1.0) / 2.0) * 100.0 if max_cos_sim > 0 else (1.0 - (min_distance / 1.414)) * 100.0)), 1)
+        # Strictly match if minimum distance is within the distance threshold
+        if best_match and min_distance <= distance_threshold:
+            confidence = round(
+                max(60.0, min(99.9, ((best_cos_sim + 1.0) / 2.0) * 100.0 if best_cos_sim > 0 else (1.0 - (min_distance / 1.414)) * 100.0)),
+                1
+            )
             return {
                 "student_id": best_match["student_id"],
                 "name": best_match["name"],

@@ -42,7 +42,7 @@ def seed_database():
         
         # 3. Seed Default System Settings
         settings_data = [
-            ("similarity_threshold", "0.55"),
+            ("similarity_threshold", "0.50"),
             ("liveness_threshold", "0.50"),
             ("college_name", "National Institute of Technology & Engineering"),
             ("academic_year", "2025-2026"),

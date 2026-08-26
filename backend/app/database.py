@@ -2,9 +2,18 @@ import sqlite3
 import json
 from datetime import datetime
 from contextlib import contextmanager
-from app.config import DB_PATH
+from app.config import DB_PATH, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
 
 def get_db_connection():
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
+        try:
+            import libsql_experimental as libsql
+            conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+            conn.row_factory = sqlite3.Row
+            return conn
+        except Exception as e:
+            print(f"[Warning] Turso connection failed, falling back to local SQLite: {e}")
+            
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=20.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

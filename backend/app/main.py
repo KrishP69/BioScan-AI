@@ -56,9 +56,12 @@ css_dir = FRONTEND_DIR / "css"
 css_dir.mkdir(exist_ok=True)
 js_dir = FRONTEND_DIR / "js"
 js_dir.mkdir(exist_ok=True)
+models_dir = FRONTEND_DIR / "models"
+models_dir.mkdir(exist_ok=True)
 
 app.mount("/css", StaticFiles(directory=str(css_dir)), name="css")
 app.mount("/js", StaticFiles(directory=str(js_dir)), name="js")
+app.mount("/models", StaticFiles(directory=str(models_dir)), name="models")
 
 @app.get("/api/health")
 def health_check():

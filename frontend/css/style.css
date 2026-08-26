@@ -830,13 +830,197 @@ select.form-control option {
     to { transform: rotate(360deg); }
 }
 
+/* Real-Time IST Digital Clock Widget */
+.header-ist-clock {
+    display: flex;
+    align-items: center;
+    margin: 0 0.5rem;
+}
+
+.ist-clock-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.38rem 0.85rem;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: var(--radius-full);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: all var(--transition-fast);
+}
+
+.ist-clock-pill:hover {
+    border-color: rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+}
+
+.ist-live-pulse {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: livePulse 2s infinite cubic-bezier(0.66, 0, 0, 1);
+    flex-shrink: 0;
+}
+
+@keyframes livePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+.ist-time-text {
+    display: flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 0.86rem;
+    color: var(--text-light);
+    letter-spacing: 0.5px;
+}
+
+.ist-digits {
+    color: #38bdf8;
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.ist-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    margin-left: 0.4rem;
+    padding: 0.1rem 0.35rem;
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
+.ist-date-text {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    padding-left: 0.4rem;
+    border-left: 1px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+/* Timeframe Selector Pills */
+.timeframe-bar {
+    display: flex;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border-subtle);
+    padding: 0.25rem;
+    border-radius: var(--radius-lg);
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.timeframe-btn {
+    padding: 0.45rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.84rem;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.timeframe-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.timeframe-btn.active {
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+}
+
+/* Week & Month Breakdown Cards */
+.period-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    transition: all var(--transition-fast);
+    margin-bottom: 1rem;
+}
+
+.period-card:hover {
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-card);
+}
+
+.period-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.period-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-full);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.stat-pill.success {
+    background: var(--status-verified-bg);
+    color: var(--status-verified);
+}
+
+.stat-pill.danger {
+    background: var(--status-rejected-bg);
+    color: var(--status-rejected);
+}
+
+.stat-pill.info {
+    background: rgba(56, 189, 248, 0.12);
+    color: var(--brand-primary);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .site-header { padding: 0.75rem 1rem; }
     .app-viewport { padding: 1.25rem 1rem 3rem; }
     .header-container { flex-wrap: wrap; }
+    .header-ist-clock { order: 2; width: 100%; justify-content: center; margin: 0.4rem 0; }
+    .ist-date-text { display: none; }
     .nav-links { overflow-x: auto; width: 100%; padding-bottom: 0.5rem; }
     .form-row { grid-template-columns: 1fr; }
     .toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
     .toast { min-width: unset; width: 100%; }
 }
+

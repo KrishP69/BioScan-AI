@@ -76,7 +76,60 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
         """, (today_str,))
         sessions_today = [dict(r) for r in cursor.fetchall()]
         
-        # 7. Recent activity / audit logs
+        # 7. Day-wise sessions breakdown (All recent dates)
+        cursor.execute("""
+            SELECT ses.id as session_id, ses.session_name, ses.date, ses.start_time, ses.end_time,
+                   ses.class_name, ses.division, ses.status as session_status,
+                   sub.code as subject_code, sub.name as subject_name,
+                   (SELECT COUNT(*) FROM attendance_records ar JOIN students st ON ar.student_id = st.id WHERE ar.session_id = ses.id AND st.account_status = 'active') as attended_count,
+                   (SELECT COUNT(*) FROM students st WHERE st.account_status = 'active') as total_active_students
+            FROM attendance_sessions ses
+            JOIN subjects sub ON ses.subject_id = sub.id
+            ORDER BY ses.date DESC, ses.start_time DESC
+        """)
+        all_session_rows = cursor.fetchall()
+        
+        admin_days_map = {}
+        for r in all_session_rows:
+            d_str = r["date"]
+            if d_str not in admin_days_map:
+                try:
+                    dt = datetime.strptime(d_str, "%Y-%m-%d")
+                    day_name = dt.strftime("%A")
+                except Exception:
+                    day_name = "Day"
+                admin_days_map[d_str] = {
+                    "date": d_str,
+                    "day_name": day_name,
+                    "total_sessions": 0,
+                    "total_attendances": 0,
+                    "sessions": []
+                }
+            
+            tot_st = r["total_active_students"] or 1
+            att_cnt = r["attended_count"] or 0
+            rate = round((att_cnt / tot_st * 100.0), 1) if tot_st > 0 else 0.0
+            
+            admin_days_map[d_str]["total_sessions"] += 1
+            admin_days_map[d_str]["total_attendances"] += att_cnt
+            admin_days_map[d_str]["sessions"].append({
+                "session_id": r["session_id"],
+                "subject_code": r["subject_code"],
+                "subject_name": r["subject_name"],
+                "session_name": r["session_name"],
+                "start_time": r["start_time"],
+                "end_time": r["end_time"],
+                "class_name": r["class_name"],
+                "division": r["division"],
+                "session_status": r["session_status"],
+                "attended_count": att_cnt,
+                "total_students": tot_st,
+                "attendance_rate": rate
+            })
+            
+        day_wise_sessions = list(admin_days_map.values())
+
+        # 8. Recent activity / audit logs
         cursor.execute("""
             SELECT id, action, details, timestamp
             FROM audit_logs
@@ -97,6 +150,7 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
             },
             "pending_preview": pending_items,
             "sessions_today": sessions_today,
+            "day_wise_sessions": day_wise_sessions,
             "recent_logs": recent_logs
         }
 
@@ -440,3 +494,58 @@ def update_system_settings(
             cursor.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('academic_year', ?)", (req.academic_year,))
             
         return {"success": True, "message": "System settings updated successfully."}
+
+@router.post("/students/{student_id}/reset-attendance")
+def reset_student_attendance_admin(
+    student_id: int,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Admin action to reset attendance records for a specific student.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, roll_number FROM students WHERE id = ?", (student_id,))
+        st = cursor.fetchone()
+        if not st:
+            raise HTTPException(status_code=404, detail="Student not found.")
+            
+        cursor.execute("SELECT COUNT(*) as count FROM attendance_records WHERE student_id = ?", (student_id,))
+        count = cursor.fetchone()["count"] or 0
+        
+        cursor.execute("DELETE FROM attendance_records WHERE student_id = ?", (student_id,))
+        
+        client_ip = request.client.host if request.client else None
+        log_audit_event("STUDENT_ATTENDANCE_RESET_ADMIN", f"Admin reset attendance records ({count} cleared) for student '{st['name']}' (Roll: {st['roll_number']}).", current_user["id"], client_ip, conn=conn)
+        
+        return {
+            "success": True,
+            "message": f"Successfully reset attendance for {st['name']} ({count} records cleared).",
+            "cleared_count": count
+        }
+
+@router.post("/attendance/reset-all")
+def reset_all_attendance_admin(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Admin action to reset all attendance records across the institution.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as count FROM attendance_records")
+        count = cursor.fetchone()["count"] or 0
+        
+        cursor.execute("DELETE FROM attendance_records")
+        
+        client_ip = request.client.host if request.client else None
+        log_audit_event("ALL_ATTENDANCE_RESET_ADMIN", f"Admin wiped all attendance records ({count} records cleared) across institution.", current_user["id"], client_ip, conn=conn)
+        
+        return {
+            "success": True,
+            "message": f"Successfully reset all attendance records ({count} logs cleared).",
+            "cleared_count": count
+        }
+

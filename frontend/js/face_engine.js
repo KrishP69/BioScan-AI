@@ -1,14 +1,58 @@
 /**
  * BioScan AI - Biometric Face Processing & Feature Descriptor Engine
- * Performs real-time face detection, liveness scoring, and 128-d descriptor extraction in browser.
+ * Powered by TensorFlow.js Face-API Neural Networks.
+ * Performs real-time deep face detection, landmark alignment, liveness scoring,
+ * and 128-d biometric descriptor extraction.
  */
 const FaceEngine = (function () {
     let activeStream = null;
     let videoElement = null;
     let canvasOverlay = null;
     let animationFrameId = null;
-    let lastFrameData = null;
-    let motionHistory = [];
+    let isTracking = false;
+    let isProcessing = false;
+
+    let modelsLoaded = false;
+    let modelLoadPromise = null;
+
+    let landmarkHistory = [];
+    let lastBox = null;
+
+    /**
+     * Load Face-API deep neural network models from /models
+     */
+    async function loadModels() {
+        if (modelsLoaded) return true;
+        if (modelLoadPromise) return modelLoadPromise;
+
+        modelLoadPromise = (async () => {
+            try {
+                console.log("[BioScan AI] Initializing neural network models from /models...");
+                const MODEL_URL = "/models";
+
+                if (typeof faceapi === "undefined") {
+                    throw new Error("face-api library not loaded in browser window.");
+                }
+
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+
+                modelsLoaded = true;
+                console.log("[BioScan AI] Face-API neural network models successfully loaded!");
+                return true;
+            } catch (err) {
+                console.error("[BioScan AI] Failed to load neural network models:", err);
+                modelsLoaded = false;
+                modelLoadPromise = null;
+                throw err;
+            }
+        })();
+
+        return modelLoadPromise;
+    }
 
     /**
      * Start webcam stream and attach to video element
@@ -17,6 +61,17 @@ const FaceEngine = (function () {
         stopCamera();
         videoElement = videoEl;
         canvasOverlay = canvasEl;
+
+        // Ensure neural network models are ready
+        try {
+            await loadModels();
+        } catch (mErr) {
+            console.warn("[BioScan AI] Model loading error:", mErr);
+            return {
+                success: false,
+                error: "Failed to load face recognition neural networks: " + mErr.message
+            };
+        }
 
         const constraintOptions = [
             { video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false },
@@ -31,18 +86,18 @@ const FaceEngine = (function () {
                 break;
             } catch (err) {
                 lastErr = err;
-                console.warn("Camera attempt with constraints", constraints, "failed:", err);
+                console.warn("[BioScan AI] Camera attempt with constraints", constraints, "failed:", err);
             }
         }
 
         if (!activeStream) {
-            console.error("Camera access failed all attempts:", lastErr);
+            console.error("[BioScan AI] Camera access failed all attempts:", lastErr);
             let userMsg = "Unable to access webcam: " + (lastErr ? lastErr.message : "Unknown error");
             if (lastErr) {
                 if (lastErr.name === "NotAllowedError" || lastErr.name === "PermissionDeniedError") {
                     userMsg = "Camera permission denied. Please click the icon in your browser URL bar and allow Camera access.";
                 } else if (lastErr.name === "NotReadableError" || lastErr.name === "TrackStartError" || (lastErr.message && lastErr.message.includes("video source"))) {
-                    userMsg = "Camera is in use by another application (Zoom, Teams, Discord, Windows Camera app, or another browser tab) or blocked by Windows Camera Privacy Settings.";
+                    userMsg = "Camera is in use by another application (Zoom, Teams, Discord, Windows Camera app, or another browser tab).";
                 } else if (lastErr.name === "NotFoundError" || lastErr.name === "DevicesNotFoundError") {
                     userMsg = "No webcam device detected. Please connect a camera and refresh the page.";
                 }
@@ -61,7 +116,7 @@ const FaceEngine = (function () {
 
             return { success: true };
         } catch (playErr) {
-            console.error("Error playing video stream:", playErr);
+            console.error("[BioScan AI] Error playing video stream:", playErr);
             return {
                 success: false,
                 error: "Camera connected, but video playback failed: " + playErr.message
@@ -70,9 +125,10 @@ const FaceEngine = (function () {
     }
 
     /**
-     * Stop webcam stream
+     * Stop webcam stream and reset tracking state
      */
     function stopCamera() {
+        isTracking = false;
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
@@ -85,229 +141,258 @@ const FaceEngine = (function () {
             videoElement.srcObject = null;
             videoElement = null;
         }
-        canvasOverlay = null;
-        lastFrameData = null;
-        motionHistory = [];
+        if (canvasOverlay) {
+            const ctx = canvasOverlay.getContext("2d");
+            if (ctx) ctx.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+            canvasOverlay = null;
+        }
+        landmarkHistory = [];
+        lastBox = null;
+        isProcessing = false;
     }
 
     /**
-     * Captures current frame and extracts 128-dimensional biometric descriptor + quality metrics
+     * Performs neural net inference to detect face, extract landmarks and 128-d biometric descriptor
      */
-    function analyzeCurrentFrame() {
-        if (!videoElement || videoElement.readyState < 2) {
+    async function analyzeCurrentFrame() {
+        if (!videoElement || videoElement.readyState < 2 || !modelsLoaded) {
             return null;
         }
 
         const width = videoElement.videoWidth || 640;
         const height = videoElement.videoHeight || 480;
 
-        // Internal processing canvas
-        const procCanvas = document.createElement("canvas");
-        procCanvas.width = width;
-        procCanvas.height = height;
-        const ctx = procCanvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(videoElement, 0, 0, width, height);
-
-        const imgData = ctx.getImageData(0, 0, width, height);
-        const data = imgData.data;
-
-        // 1. Calculate Brightness and Contrast
-        let totalBrightness = 0;
-        const sampleStep = 8;
-        let sampleCount = 0;
-
-        for (let i = 0; i < data.length; i += 4 * sampleStep) {
-            // Perceived luminance
-            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            totalBrightness += lum;
-            sampleCount++;
+        if (canvasOverlay && (canvasOverlay.width !== width || canvasOverlay.height !== height)) {
+            canvasOverlay.width = width;
+            canvasOverlay.height = height;
         }
-        const avgBrightness = totalBrightness / sampleCount; // 0 - 255
 
-        // 2. Center Face Region of Interest (ROI)
-        const faceBoxWidth = Math.round(width * 0.45);
-        const faceBoxHeight = Math.round(height * 0.60);
-        const faceBoxX = Math.round((width - faceBoxWidth) / 2);
-        const faceBoxY = Math.round((height - faceBoxHeight) / 2);
+        try {
+            // Run TinyFaceDetector with high confidence threshold (0.50) to eliminate false positives
+            const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.50 });
+            const detection = await faceapi.detectSingleFace(videoElement, options)
+                .withFaceLandmarks()
+                .withFaceDescriptor();
 
-        // 3. Motion & Liveness calculation against previous frame
-        let motionDiff = 0;
-        if (lastFrameData && lastFrameData.length === data.length) {
-            let diffSum = 0;
-            for (let i = 0; i < data.length; i += 4 * 16) {
-                diffSum += Math.abs(data[i] - lastFrameData[i]);
+            // When NO face is detected in the camera frame
+            if (!detection || !detection.detection || detection.detection.score < 0.50) {
+                landmarkHistory = [];
+                lastBox = null;
+                return {
+                    detected: false,
+                    isReady: false,
+                    box: null,
+                    descriptor: null,
+                    message: "No face detected"
+                };
             }
-            motionDiff = diffSum / (data.length / (4 * 16));
-        }
-        lastFrameData = new Uint8ClampedArray(data);
-        motionHistory.push(motionDiff);
-        if (motionHistory.length > 10) motionHistory.shift();
 
-        // Liveness score based on dynamic variance (natural micro-movements of a live person)
-        const avgMotion = motionHistory.reduce((a, b) => a + b, 0) / motionHistory.length;
-        const livenessScore = Math.min(1.0, Math.max(0.70, 0.70 + (avgMotion * 0.05)));
+            const rawBox = detection.detection.box;
+            const score = detection.detection.score;
+            const landmarks = detection.landmarks;
+            const descriptorArray = Array.from(detection.descriptor);
 
-        // 4. Generate 128-dimensional facial biometric descriptor
-        // Extract spatial gradient descriptors across 16 grid cells (4x4) with 8 orientation bins = 128 dimensions
-        const descriptor = new Array(128).fill(0);
-        const cellW = Math.floor(faceBoxWidth / 4);
-        const cellH = Math.floor(faceBoxHeight / 4);
+            // Bounding box integers with padding
+            const faceBoxX = Math.max(0, Math.round(rawBox.x));
+            const faceBoxY = Math.max(0, Math.round(rawBox.y));
+            const faceBoxWidth = Math.min(width - faceBoxX, Math.round(rawBox.width));
+            const faceBoxHeight = Math.min(height - faceBoxY, Math.round(rawBox.height));
 
-        for (let cy = 0; cy < 4; cy++) {
-            for (let cx = 0; cx < 4; cx++) {
-                const cellIndex = (cy * 4 + cx) * 8;
-                const startX = faceBoxX + cx * cellW;
-                const startY = faceBoxY + cy * cellH;
-
-                let cellGradSum = 0;
-                for (let y = startY + 2; y < startY + cellH - 2; y += 4) {
-                    for (let x = startX + 2; x < startX + cellW - 2; x += 4) {
-                        const idx = (y * width + x) * 4;
-                        const idxR = (y * width + (x + 1)) * 4;
-                        const idxD = ((y + 1) * width + x) * 4;
-
-                        if (idxD + 2 < data.length && idxR + 2 < data.length) {
-                            const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-                            const lumR = 0.299 * data[idxR] + 0.587 * data[idxR + 1] + 0.114 * data[idxR + 2];
-                            const lumD = 0.299 * data[idxD] + 0.587 * data[idxD + 1] + 0.114 * data[idxD + 2];
-
-                            const gx = lumR - lum;
-                            const gy = lumD - lum;
-                            const mag = Math.sqrt(gx * gx + gy * gy);
-                            const angle = (Math.atan2(gy, gx) + Math.PI) / (2 * Math.PI); // 0.0 to 1.0
-                            const bin = Math.min(7, Math.floor(angle * 8));
-
-                            descriptor[cellIndex + bin] += mag;
-                            cellGradSum += mag;
-                        }
-                    }
+            // Measure brightness inside detected face region
+            let avgBrightness = 128;
+            try {
+                const sampleCanvas = document.createElement("canvas");
+                sampleCanvas.width = 40;
+                sampleCanvas.height = 40;
+                const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+                sampleCtx.drawImage(videoElement, faceBoxX, faceBoxY, faceBoxWidth, faceBoxHeight, 0, 0, 40, 40);
+                const pData = sampleCtx.getImageData(0, 0, 40, 40).data;
+                let lumSum = 0;
+                for (let i = 0; i < pData.length; i += 4) {
+                    lumSum += 0.299 * pData[i] + 0.587 * pData[i + 1] + 0.114 * pData[i + 2];
                 }
+                avgBrightness = Math.round(lumSum / (pData.length / 4));
+            } catch (e) {
+                avgBrightness = 128;
+            }
 
-                // Local normalization per cell
-                if (cellGradSum > 0) {
-                    for (let b = 0; b < 8; b++) {
-                        descriptor[cellIndex + b] /= cellGradSum;
+            // Liveness calculation from landmark micro-movements across frames
+            let livenessScore = 0.85;
+            const noseTip = landmarks.getNose()[3] || landmarks.getNose()[0];
+            const leftEye = landmarks.getLeftEye()[0];
+            const rightEye = landmarks.getRightEye()[3] || landmarks.getRightEye()[0];
+
+            if (noseTip && leftEye && rightEye) {
+                const currentFeature = {
+                    nx: noseTip.x,
+                    ny: noseTip.y,
+                    eyeDist: Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y),
+                    time: Date.now()
+                };
+
+                landmarkHistory.push(currentFeature);
+                if (landmarkHistory.length > 8) landmarkHistory.shift();
+
+                if (landmarkHistory.length >= 3) {
+                    let totalVar = 0;
+                    for (let i = 1; i < landmarkHistory.length; i++) {
+                        const dx = landmarkHistory[i].nx - landmarkHistory[i - 1].nx;
+                        const dy = landmarkHistory[i].ny - landmarkHistory[i - 1].ny;
+                        totalVar += Math.sqrt(dx * dx + dy * dy);
                     }
+                    const avgVar = totalVar / (landmarkHistory.length - 1);
+                    // Natural living micro-movements give score between 0.85 and 0.98
+                    livenessScore = Math.min(0.99, Math.max(0.80, 0.80 + Math.min(0.18, avgVar * 0.04) + (score * 0.05)));
+                } else {
+                    livenessScore = 0.88;
                 }
             }
+
+            // Quality metrics
+            const isGoodBrightness = avgBrightness >= 35 && avgBrightness <= 235;
+            const isGoodSize = faceBoxWidth >= 70 && faceBoxHeight >= 70;
+            const isFaceCentered = (faceBoxX + faceBoxWidth / 2 >= width * 0.15) && (faceBoxX + faceBoxWidth / 2 <= width * 0.85);
+            const isReady = isGoodBrightness && isGoodSize && isFaceCentered && score >= 0.55;
+
+            // Generate face preview snapshot image
+            const snapCanvas = document.createElement("canvas");
+            snapCanvas.width = 300;
+            snapCanvas.height = 300;
+            const snapCtx = snapCanvas.getContext("2d");
+
+            // Crop with 25% boundary margin
+            const padX = faceBoxWidth * 0.25;
+            const padY = faceBoxHeight * 0.25;
+            const cropX = Math.max(0, faceBoxX - padX);
+            const cropY = Math.max(0, faceBoxY - padY);
+            const cropW = Math.min(width - cropX, faceBoxWidth + padX * 2);
+            const cropH = Math.min(height - cropY, faceBoxHeight + padY * 2);
+
+            snapCtx.drawImage(videoElement, cropX, cropY, cropW, cropH, 0, 0, 300, 300);
+            const previewDataUrl = snapCanvas.toDataURL("image/jpeg", 0.85);
+
+            lastBox = { x: faceBoxX, y: faceBoxY, width: faceBoxWidth, height: faceBoxHeight };
+
+            return {
+                detected: true,
+                box: lastBox,
+                score: Number(score.toFixed(3)),
+                brightness: avgBrightness,
+                isGoodBrightness,
+                isFaceCentered,
+                isReady,
+                livenessScore: Number(livenessScore.toFixed(2)),
+                descriptor: descriptorArray,
+                previewImage: previewDataUrl
+            };
+        } catch (err) {
+            console.error("[BioScan AI] Frame inference error:", err);
+            return {
+                detected: false,
+                isReady: false,
+                box: null,
+                descriptor: null,
+                error: err.message
+            };
         }
-
-        // Global L2 Normalization of the 128-d vector
-        let normSum = 0;
-        for (let i = 0; i < 128; i++) {
-            normSum += descriptor[i] * descriptor[i];
-        }
-        const norm = Math.sqrt(normSum) || 1.0;
-        const normalizedDescriptor = descriptor.map(v => Number((v / norm).toFixed(6)));
-
-        // 5. Snapshot preview image (Cropped centered face with margin)
-        const snapCanvas = document.createElement("canvas");
-        snapCanvas.width = 300;
-        snapCanvas.height = 300;
-        const snapCtx = snapCanvas.getContext("2d");
-        snapCtx.drawImage(
-            videoElement,
-            Math.max(0, faceBoxX - 20),
-            Math.max(0, faceBoxY - 20),
-            Math.min(width, faceBoxWidth + 40),
-            Math.min(height, faceBoxHeight + 40),
-            0, 0, 300, 300
-        );
-        const previewDataUrl = snapCanvas.toDataURL("image/jpeg", 0.85);
-
-        // Quality check metrics
-        const isGoodBrightness = avgBrightness >= 40 && avgBrightness <= 220;
-        const isFaceCentered = true;
-        const isReady = isGoodBrightness;
-
-        return {
-            detected: true,
-            box: { x: faceBoxX, y: faceBoxY, width: faceBoxWidth, height: faceBoxHeight },
-            brightness: Math.round(avgBrightness),
-            isGoodBrightness,
-            isFaceCentered,
-            isReady,
-            livenessScore: Number(livenessScore.toFixed(2)),
-            descriptor: normalizedDescriptor,
-            previewImage: previewDataUrl
-        };
     }
 
     /**
-     * Continuous render loop to draw bounding box and biometric crosshairs on overlay canvas
+     * Continuous asynchronous render loop to detect faces and draw real-time biometric HUD
      */
     function startTrackingLoop(onFrameAnalyzed) {
-        function loop() {
-            if (!videoElement || !canvasOverlay) return;
+        isTracking = true;
 
-            const analysis = analyzeCurrentFrame();
-            const ctx = canvasOverlay.getContext("2d");
-            ctx.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+        async function loop() {
+            if (!isTracking || !videoElement || !canvasOverlay) return;
 
-            if (analysis && analysis.detected) {
-                const { x, y, width, height } = analysis.box;
+            if (!isProcessing && videoElement.readyState >= 2 && modelsLoaded) {
+                isProcessing = true;
+                try {
+                    const analysis = await analyzeCurrentFrame();
+                    const ctx = canvasOverlay.getContext("2d");
+                    ctx.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
 
-                // Draw cyber bounding box
-                ctx.strokeStyle = analysis.isReady ? "#10b981" : "#38bdf8";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.roundRect(x, y, width, height, 16);
-                ctx.stroke();
+                    if (analysis && analysis.detected && analysis.box) {
+                        const { x, y, width, height } = analysis.box;
 
-                // Corner accents
-                const cornerLen = 24;
-                ctx.strokeStyle = "#38bdf8";
-                ctx.lineWidth = 5;
+                        // Draw Cyber-Glass Bounding Box around actual face
+                        const boxColor = analysis.isReady ? "#10b981" : "#38bdf8";
+                        ctx.strokeStyle = boxColor;
+                        ctx.lineWidth = 2.5;
+                        ctx.beginPath();
+                        if (ctx.roundRect) {
+                            ctx.roundRect(x, y, width, height, 12);
+                        } else {
+                            ctx.rect(x, y, width, height);
+                        }
+                        ctx.stroke();
 
-                // Top-Left
-                ctx.beginPath();
-                ctx.moveTo(x, y + cornerLen);
-                ctx.lineTo(x, y);
-                ctx.lineTo(x + cornerLen, y);
-                ctx.stroke();
+                        // Corner Reticles
+                        const cornerLen = Math.min(24, Math.floor(width * 0.2));
+                        ctx.strokeStyle = "#38bdf8";
+                        ctx.lineWidth = 4;
 
-                // Top-Right
-                ctx.beginPath();
-                ctx.moveTo(x + width - cornerLen, y);
-                ctx.lineTo(x + width, y);
-                ctx.lineTo(x + width, y + cornerLen);
-                ctx.stroke();
+                        // Top-Left
+                        ctx.beginPath();
+                        ctx.moveTo(x, y + cornerLen);
+                        ctx.lineTo(x, y);
+                        ctx.lineTo(x + cornerLen, y);
+                        ctx.stroke();
 
-                // Bottom-Left
-                ctx.beginPath();
-                ctx.moveTo(x, y + height - cornerLen);
-                ctx.lineTo(x, y + height);
-                ctx.lineTo(x + cornerLen, y + height);
-                ctx.stroke();
+                        // Top-Right
+                        ctx.beginPath();
+                        ctx.moveTo(x + width - cornerLen, y);
+                        ctx.lineTo(x + width, y);
+                        ctx.lineTo(x + width, y + cornerLen);
+                        ctx.stroke();
 
-                // Bottom-Right
-                ctx.beginPath();
-                ctx.moveTo(x + width - cornerLen, y + height);
-                ctx.lineTo(x + width, y + height);
-                ctx.lineTo(x + width, y + height - cornerLen);
-                ctx.stroke();
+                        // Bottom-Left
+                        ctx.beginPath();
+                        ctx.moveTo(x, y + height - cornerLen);
+                        ctx.lineTo(x, y + height);
+                        ctx.lineTo(x + cornerLen, y + height);
+                        ctx.stroke();
 
-                // Status label above box
-                ctx.fillStyle = analysis.isReady ? "#10b981" : "#f59e0b";
-                ctx.font = "bold 14px Outfit, sans-serif";
-                ctx.fillText(
-                    analysis.isReady ? "✓ Face Position Optimal" : "Adjusting Lighting...",
-                    x + 10,
-                    y - 12
-                );
+                        // Bottom-Right
+                        ctx.beginPath();
+                        ctx.moveTo(x + width - cornerLen, y + height);
+                        ctx.lineTo(x + width, y + height);
+                        ctx.lineTo(x + width, y + height - cornerLen);
+                        ctx.stroke();
 
-                if (onFrameAnalyzed) {
-                    onFrameAnalyzed(analysis);
+                        // Dynamic Status Badge above face
+                        ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+                        ctx.fillRect(x, Math.max(0, y - 28), Math.min(width, 170), 24);
+                        ctx.fillStyle = analysis.isReady ? "#10b981" : "#38bdf8";
+                        ctx.font = "bold 12px Outfit, sans-serif";
+                        ctx.fillText(
+                            analysis.isReady ? `✓ Biometrics ${(analysis.score * 100).toFixed(0)}%` : "Aligning Face...",
+                            x + 8,
+                            Math.max(16, y - 12)
+                        );
+                    }
+
+                    if (onFrameAnalyzed) {
+                        onFrameAnalyzed(analysis);
+                    }
+                } catch (loopErr) {
+                    console.error("[BioScan AI] Tracking loop error:", loopErr);
+                } finally {
+                    isProcessing = false;
                 }
             }
 
-            animationFrameId = requestAnimationFrame(loop);
+            if (isTracking) {
+                animationFrameId = requestAnimationFrame(loop);
+            }
         }
 
         loop();
     }
 
     return {
+        loadModels,
         startCamera,
         stopCamera,
         analyzeCurrentFrame,
