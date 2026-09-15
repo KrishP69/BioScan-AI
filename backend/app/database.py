@@ -7,8 +7,12 @@ from app.config import DB_PATH, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
 def get_db_connection():
     if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
         try:
-            import libsql_experimental as libsql
-            conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+            try:
+                import libsql
+                conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+            except ImportError:
+                import libsql_experimental as libsql
+                conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
             conn.row_factory = sqlite3.Row
             return conn
         except Exception as e:
