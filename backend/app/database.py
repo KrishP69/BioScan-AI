@@ -4,17 +4,80 @@ from datetime import datetime
 from contextlib import contextmanager
 from app.config import DB_PATH, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
 
+class RowDict(dict):
+    """Dictionary that also supports integer indexing like sqlite3.Row."""
+    def __init__(self, columns, values):
+        super().__init__(zip(columns, values))
+        self._values = tuple(values)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return super().__getitem__(key)
+
+class LibsqlCursorWrapper:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+    def _wrap_row(self, row):
+        if row is None:
+            return None
+        if isinstance(row, (dict, sqlite3.Row)):
+            return row
+        if hasattr(self._cursor, "description") and self._cursor.description:
+            cols = [d[0] for d in self._cursor.description]
+            return RowDict(cols, row)
+        return row
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        return self._wrap_row(row)
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if not rows:
+            return []
+        if hasattr(self._cursor, "description") and self._cursor.description:
+            cols = [d[0] for d in self._cursor.description]
+            return [RowDict(cols, r) if not isinstance(r, (dict, sqlite3.Row)) else r for r in rows]
+        return rows
+
+    def execute(self, *args, **kwargs):
+        self._cursor.execute(*args, **kwargs)
+        return self
+
+class LibsqlConnectionWrapper:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def cursor(self):
+        return LibsqlCursorWrapper(self._conn.cursor())
+
+    def execute(self, *args, **kwargs):
+        cur = self.cursor()
+        cur.execute(*args, **kwargs)
+        return cur
+
 def get_db_connection():
     if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
         try:
             try:
                 import libsql
-                conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+                raw_conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
             except ImportError:
                 import libsql_experimental as libsql
-                conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
-            conn.row_factory = sqlite3.Row
-            return conn
+                raw_conn = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+
+            if hasattr(raw_conn, "row_factory"):
+                raw_conn.row_factory = sqlite3.Row
+                return raw_conn
+            return LibsqlConnectionWrapper(raw_conn)
         except Exception as e:
             print(f"[Warning] Turso connection failed, falling back to local SQLite: {e}")
             
