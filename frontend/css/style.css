@@ -69,6 +69,37 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* ==========================================================================
+   3D Canvas & Volumetric Lighting
+   ========================================================================== */
+.webgl-3d-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.9;
+}
+
+.cursor-glow {
+    position: fixed;
+    top: -150px;
+    left: -150px;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, rgba(99, 102, 241, 0.08) 45%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+    filter: blur(35px);
+    mix-blend-mode: screen;
+    will-change: transform;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
 /* Ambient dynamic background lighting */
 .ambient-glow {
     position: fixed;
@@ -76,7 +107,7 @@ body {
     filter: blur(120px);
     pointer-events: none;
     z-index: 0;
-    opacity: 0.4;
+    opacity: 0.35;
     animation: floatGlow 14s ease-in-out infinite alternate;
 }
 .glow-1 {
@@ -84,7 +115,7 @@ body {
     left: 15%;
     width: 500px;
     height: 500px;
-    background: radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.22) 0%, transparent 70%);
 }
 .glow-2 {
     bottom: -10%;
@@ -98,7 +129,7 @@ body {
     right: 35%;
     width: 400px;
     height: 400px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, transparent 70%);
 }
 
 @keyframes floatGlow {
@@ -184,20 +215,24 @@ body {
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 .nav-item {
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     font-weight: 500;
-    padding: 0.5rem 0.9rem;
+    padding: 0.45rem 0.75rem;
     border-radius: var(--radius-sm);
     transition: all var(--transition-fast);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 .nav-item:hover, .nav-item.active {
     color: var(--text-primary);
@@ -275,32 +310,52 @@ body {
     padding: 2rem 2rem 4rem;
 }
 
-/* Generic Card & Glass Container */
+/* Generic Card & Glass Container - Flat & Stable */
 .glass-panel {
     background: var(--bg-glass);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-glass);
-    padding: 2rem;
+    box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    padding: 2.25rem;
     position: relative;
     overflow: hidden;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    transition: transform 0.35s ease-out, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .glass-card {
     background: var(--bg-glass-card);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    padding: 1.5rem;
-    transition: transform var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth);
+    padding: 1.65rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s ease, box-shadow 0.25s ease;
 }
 .glass-card:hover {
     border-color: var(--border-accent);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
-    transform: translateY(-2px);
+    box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Holographic Glare Overlay */
+.tilt-glare {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0;
+    border-radius: inherit;
+    mix-blend-mode: overlay;
+    transition: opacity 0.25s ease;
 }
 
 /* Typography & Headings */
@@ -328,23 +383,30 @@ h4 { font-size: 1.1rem; }
     margin-bottom: 1.75rem;
 }
 
-/* Buttons */
+/* 3D Tactile Buttons */
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.55rem;
     font-family: var(--font-heading);
     font-weight: 600;
     font-size: 0.92rem;
-    padding: 0.7rem 1.4rem;
+    padding: 0.75rem 1.5rem;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--transition-smooth);
     border: none;
     outline: none;
     text-decoration: none;
     white-space: nowrap;
+    position: relative;
+    transform: perspective(600px) translateZ(0);
+    transform-style: preserve-3d;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease, filter 0.2s ease;
+}
+.btn:hover {
+    transform: perspective(600px) translateY(-2px) translateZ(10px);
 }
 .btn:active {
     transform: scale(0.98);
@@ -835,19 +897,24 @@ select.form-control option {
     display: flex;
     align-items: center;
     margin: 0 0.5rem;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .ist-clock-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.38rem 0.85rem;
-    background: rgba(15, 23, 42, 0.7);
+    gap: 0.65rem;
+    padding: 0.42rem 0.95rem;
+    background: rgba(15, 23, 42, 0.75);
     border: 1px solid rgba(56, 189, 248, 0.25);
     border-radius: var(--radius-full);
     backdrop-filter: blur(12px);
     box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     transition: all var(--transition-fast);
+    white-space: nowrap;
+    flex-shrink: 0;
+    line-height: 1.2;
 }
 
 .ist-clock-pill:hover {
@@ -879,18 +946,22 @@ select.form-control option {
 }
 
 .ist-time-text {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
     font-weight: 600;
     font-size: 0.86rem;
     color: var(--text-light);
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .ist-digits {
     color: #38bdf8;
     text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    white-space: nowrap;
+    display: inline;
 }
 
 .ist-badge {
@@ -903,15 +974,18 @@ select.form-control option {
     color: #38bdf8;
     border-radius: 4px;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .ist-date-text {
     font-size: 0.76rem;
     color: var(--text-secondary);
     font-weight: 500;
-    padding-left: 0.4rem;
+    padding-left: 0.5rem;
     border-left: 1px solid var(--border-subtle);
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* Timeframe Selector Pills */
@@ -1022,5 +1096,81 @@ select.form-control option {
     .form-row { grid-template-columns: 1fr; }
     .toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
     .toast { min-width: unset; width: 100%; }
+}
+
+/* ==========================================================================
+   Clean Centered 3D Hero & Futuristic Cyber Portals
+   ========================================================================== */
+.hero-layout-clean {
+    position: relative;
+    z-index: 2;
+}
+
+.hero-pill-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+    padding: 0.45rem 1.15rem;
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    color: var(--brand-primary);
+    font-weight: 600;
+    transform: perspective(400px) translateZ(10px);
+}
+
+.hero-heading {
+    font-size: 3.4rem;
+    line-height: 1.15;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.hero-description {
+    color: var(--text-secondary);
+}
+
+.hero-actions-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* 3D Cyber Portals Cards */
+.cyber-portal-card {
+    border-top: none;
+    position: relative;
+}
+.cyber-portal-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #38bdf8, #6366f1, #38bdf8);
+    background-size: 200% 100%;
+    animation: cyberGlowBar 4s linear infinite;
+}
+.cyber-portal-card.admin-theme::before {
+    background: linear-gradient(90deg, #f59e0b, #ef4444, #f59e0b);
+    background-size: 200% 100%;
+    animation: cyberGlowBar 4s linear infinite;
+}
+
+@keyframes cyberGlowBar {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+}
+
+@media (max-width: 768px) {
+    .hero-heading {
+        font-size: 2.3rem !important;
+    }
+    .hero-telemetry-grid {
+        grid-template-columns: 1fr 1fr !important;
+    }
 }
 

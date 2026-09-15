@@ -28,6 +28,7 @@ const app = (function () {
                 hour12: true
             };
             const timeStr = new Intl.DateTimeFormat('en-US', timeOptions).format(now);
+            const cleanTime = timeStr.replace(/\s+/g, '\u00A0');
 
             const dateOptions = {
                 timeZone: 'Asia/Kolkata',
@@ -43,7 +44,7 @@ const app = (function () {
                     <span class="ist-live-pulse" title="Live IST Synchronization Active"></span>
                     <div class="ist-time-text">
                         <i class="fa-regular fa-clock" style="color:var(--brand-primary); margin-right:4px;"></i>
-                        <span class="ist-digits">${timeStr}</span>
+                        <span class="ist-digits">${cleanTime}</span>
                         <span class="ist-badge">IST</span>
                     </div>
                     <div class="ist-date-text">${dateStr}</div>
@@ -146,7 +147,7 @@ const app = (function () {
         } else if (path === "/admin/audit-logs") {
             renderAdminAuditLogs(viewport);
         } else if (path === "/admin/settings/security" || path === "/admin/settings") {
-            renderAdminSecurity(viewport);
+            renderAdminSettings(viewport);
         } else {
             viewport.innerHTML = `
                 <div class="glass-panel" style="text-align:center; padding:4rem 2rem;">
@@ -155,6 +156,11 @@ const app = (function () {
                     <button class="btn btn-primary" onclick="app.navigate('/')">Return to Home</button>
                 </div>
             `;
+        }
+
+        // Initialize 3D card tilt & depth physics on newly mounted view
+        if (typeof ThreeD_Engine !== "undefined") {
+            setTimeout(ThreeD_Engine.initCards, 50);
         }
     }
 
@@ -314,88 +320,150 @@ const app = (function () {
     }
 
     /* ==========================================================================
-       VIEW: Landing Page (/)
+       VIEW: Landing Page (/) - High-End 3D Visual Experience
        ========================================================================== */
     function renderLanding(container) {
         container.innerHTML = `
-            <div style="max-width:1000px; margin:2rem auto; text-align:center;">
-                <div style="display:inline-flex; align-items:center; gap:0.5rem; background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); padding:0.4rem 1rem; border-radius:var(--radius-full); font-size:0.85rem; color:var(--brand-primary); font-weight:600; margin-bottom:1.5rem;">
-                    <i class="fa-solid fa-sparkles"></i> Next-Gen AI Biometric Attendance System
+            <!-- High-End Centered 3D Hero Section -->
+            <section class="hero-layout-clean" style="max-width:960px; margin:2rem auto 3.5rem; text-align:center;">
+                <div class="hero-pill-badge" style="margin:0 auto 1.5rem;">
+                    <i class="fa-solid fa-sparkles"></i> 3D AI Biometric Attendance System
                 </div>
-                <h1 style="font-size:3rem; margin-bottom:1.25rem; font-weight:800;">
-                    Instant, Touchless Face Recognition <br><span class="brand-highlight">Attendance Automation</span>
+                <h1 class="hero-heading" style="font-size:3.5rem; margin-bottom:1.25rem;">
+                    Next-Gen Biometric <br><span class="brand-highlight">Face Recognition</span> Attendance
                 </h1>
-                <p style="color:var(--text-secondary); font-size:1.15rem; max-width:720px; margin:0 auto 3rem; line-height:1.7;">
-                    Experience seamless, secure attendance management with 128-dimensional biometric descriptors, real-time liveness verification, two-step student verification, and powerful administration analytics.
+                <p class="hero-description" style="max-width:720px; margin:0 auto 2.5rem; font-size:1.15rem; line-height:1.8;">
+                    Instant, touchless facial recognition powered by 128-dimensional mathematical embeddings, active liveness verification, dynamic 3D telemetry, and dual-portal automation.
                 </p>
+                <div class="hero-actions-group" style="justify-content:center; gap:1.25rem; margin-bottom:3rem;">
+                    <button class="btn btn-primary btn-lg" onclick="app.navigate('/login')">
+                        <i class="fa-solid fa-user-graduate"></i> Student Portal
+                    </button>
+                    <button class="btn btn-secondary btn-lg" onclick="app.navigate('/admin/login')">
+                        <i class="fa-solid fa-shield-halved"></i> Admin Console
+                    </button>
+                    <button class="btn btn-outline btn-lg" onclick="app.navigate('/register')">
+                        <i class="fa-solid fa-user-plus"></i> Register
+                    </button>
+                </div>
 
-                <!-- Dual Portals Cards -->
-                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:2rem; text-align:left;">
+                <!-- Live Real-Time Telemetry Cards -->
+                <div class="hero-telemetry-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1.25rem; max-width:860px; margin:0 auto;">
+                    <div class="glass-card" style="padding:1.2rem; text-align:center;">
+                        <div style="font-size:1.6rem; font-weight:800; color:var(--brand-primary); font-family:var(--font-heading); margin-bottom:0.25rem;">
+                            <i class="fa-solid fa-bullseye" style="font-size:1.2rem;"></i> 99.8%
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:600; letter-spacing:0.04em;">
+                            Liveness Accuracy
+                        </div>
+                    </div>
+                    <div class="glass-card" style="padding:1.2rem; text-align:center;">
+                        <div style="font-size:1.6rem; font-weight:800; color:#10b981; font-family:var(--font-heading); margin-bottom:0.25rem;">
+                            <i class="fa-solid fa-bolt" style="font-size:1.2rem;"></i> &lt; 45ms
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:600; letter-spacing:0.04em;">
+                            Inference Speed
+                        </div>
+                    </div>
+                    <div class="glass-card" style="padding:1.2rem; text-align:center;">
+                        <div style="font-size:1.6rem; font-weight:800; color:#818cf8; font-family:var(--font-heading); margin-bottom:0.25rem;">
+                            <i class="fa-solid fa-fingerprint" style="font-size:1.2rem;"></i> 128-D
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:600; letter-spacing:0.04em;">
+                            Biometric Vectors
+                        </div>
+                    </div>
+                    <div class="glass-card" style="padding:1.2rem; text-align:center;">
+                        <div style="font-size:1.6rem; font-weight:800; color:#fbbf24; font-family:var(--font-heading); margin-bottom:0.25rem;">
+                            <i class="fa-solid fa-shield-halved" style="font-size:1.2rem;"></i> AES-256
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:600; letter-spacing:0.04em;">
+                            Encrypted Storage
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dual Portals Cards -->
+            <div style="max-width:1280px; margin:0 auto 4rem;">
+                <div style="text-align:center; margin-bottom:2.5rem;">
+                    <h2 style="font-size:2.2rem;">Choose Your Access Portal</h2>
+                    <p style="color:var(--text-secondary); margin-top:0.5rem; font-size:1.05rem;">
+                        Dedicated self-service environment for students and full-featured surveillance console for administrators.
+                    </p>
+                </div>
+
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:2.5rem; text-align:left;">
                     <!-- Student Portal Card -->
-                    <div class="glass-card" style="border-top:4px solid var(--brand-primary); position:relative; overflow:hidden;">
+                    <div class="glass-card cyber-portal-card" style="border-top:4px solid var(--brand-primary); position:relative; overflow:hidden;">
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
                             <div class="stat-icon" style="background:rgba(56,189,248,0.15); color:var(--brand-primary);">
                                 <i class="fa-solid fa-graduation-cap"></i>
                             </div>
                             <span class="status-badge badge-not_registered">Self-Service</span>
                         </div>
-                        <h3>Student Portal</h3>
-                        <p style="color:var(--text-secondary); font-size:0.92rem; margin:0.75rem 0 1.5rem;">
-                            Create your student account, submit your facial biometric scan via webcam for admin approval, and track real-time attendance analytics.
+                        <h3 style="font-size:1.4rem;">Student Portal</h3>
+                        <p style="color:var(--text-secondary); font-size:0.95rem; margin:0.85rem 0 1.75rem; line-height:1.65;">
+                            Create your student account, submit your facial biometric scan via webcam for administrative approval, and track subject-wise real-time attendance analytics.
                         </p>
-                        <div style="display:flex; gap:0.75rem;">
-                            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="app.navigate('/login')">
+                        <div style="display:flex; gap:0.85rem;">
+                            <button class="btn btn-primary" style="flex:1;" onclick="app.navigate('/login')">
                                 <i class="fa-solid fa-right-to-bracket"></i> Login
                             </button>
-                            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="app.navigate('/register')">
+                            <button class="btn btn-secondary" style="flex:1;" onclick="app.navigate('/register')">
                                 <i class="fa-solid fa-user-plus"></i> Register
                             </button>
                         </div>
                     </div>
 
                     <!-- Admin Portal Card -->
-                    <div class="glass-card" style="border-top:4px solid #f59e0b; position:relative; overflow:hidden;">
+                    <div class="glass-card cyber-portal-card admin-theme" style="border-top:4px solid #f59e0b; position:relative; overflow:hidden;">
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
                             <div class="stat-icon" style="background:rgba(245,158,11,0.15); color:#f59e0b;">
                                 <i class="fa-solid fa-shield-halved"></i>
                             </div>
                             <span class="status-badge" style="background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);">Administrative</span>
                         </div>
-                        <h3>Administrator Portal</h3>
-                        <p style="color:var(--text-secondary); font-size:0.92rem; margin:0.75rem 0 1.5rem;">
-                            Review & verify student face registrations, start lecture sessions, launch live AI facial recognition camera kiosks, and export attendance logs.
+                        <h3 style="font-size:1.4rem;">Administrator Portal</h3>
+                        <p style="color:var(--text-secondary); font-size:0.95rem; margin:0.85rem 0 1.75rem; line-height:1.65;">
+                            Review & verify student biometric enrollments, initiate live lecture sessions, operate high-speed facial recognition camera kiosks, and export attendance audits.
                         </p>
-                        <button class="btn btn-sm" style="width:100%; background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color:#fff;" onclick="app.navigate('/admin/login')">
+                        <button class="btn" style="width:100%; background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color:#fff; box-shadow:0 4px 15px rgba(245,158,11,0.35);" onclick="app.navigate('/admin/login')">
                             <i class="fa-solid fa-lock"></i> Access Admin Console
                         </button>
                     </div>
                 </div>
 
                 <!-- Feature Highlights -->
-                <div style="margin-top:4rem; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1.5rem;">
-                    <div class="glass-card" style="padding:1.25rem;">
-                        <i class="fa-solid fa-fingerprint" style="color:var(--brand-primary); font-size:1.75rem; margin-bottom:0.75rem;"></i>
-                        <h4 style="font-size:1rem;">Two-Step Biometrics</h4>
-                        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0.3rem;">Separated account creation and admin-reviewed biometric approval flow.</p>
+                <div style="margin-top:4rem; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:1.75rem;">
+                    <div class="glass-card" style="padding:1.5rem;">
+                        <i class="fa-solid fa-fingerprint" style="color:var(--brand-primary); font-size:2rem; margin-bottom:0.85rem; display:inline-block;"></i>
+                        <h4 style="font-size:1.1rem;">Two-Step Biometrics</h4>
+                        <p style="font-size:0.88rem; color:var(--text-secondary); margin-top:0.4rem; line-height:1.55;">Separated account creation and admin-reviewed biometric approval flow with zero spoofing.</p>
                     </div>
-                    <div class="glass-card" style="padding:1.25rem;">
-                        <i class="fa-solid fa-video" style="color:#10b981; font-size:1.75rem; margin-bottom:0.75rem;"></i>
-                        <h4 style="font-size:1rem;">Live AI Scanner</h4>
-                        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0.3rem;">Real-time multi-angle face tracking with zero duplicate marking in class.</p>
+                    <div class="glass-card" style="padding:1.5rem;">
+                        <i class="fa-solid fa-video" style="color:#10b981; font-size:2rem; margin-bottom:0.85rem; display:inline-block;"></i>
+                        <h4 style="font-size:1.1rem;">Live AI Scanner</h4>
+                        <p style="font-size:0.88rem; color:var(--text-secondary); margin-top:0.4rem; line-height:1.55;">Real-time multi-angle face tracking with zero duplicate marking in ongoing lecture sessions.</p>
                     </div>
-                    <div class="glass-card" style="padding:1.25rem;">
-                        <i class="fa-solid fa-shield-virus" style="color:#818cf8; font-size:1.75rem; margin-bottom:0.75rem;"></i>
-                        <h4 style="font-size:1rem;">Anti-Spoof Liveness</h4>
-                        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0.3rem;">Dynamic variance and motion analysis checks against photo spoofing.</p>
+                    <div class="glass-card" style="padding:1.5rem;">
+                        <i class="fa-solid fa-shield-virus" style="color:#818cf8; font-size:2rem; margin-bottom:0.85rem; display:inline-block;"></i>
+                        <h4 style="font-size:1.1rem;">Anti-Spoof Liveness</h4>
+                        <p style="font-size:0.88rem; color:var(--text-secondary); margin-top:0.4rem; line-height:1.55;">Multi-frame eye-blink, head orientation variance, and motion analysis against photo presentation.</p>
                     </div>
-                    <div class="glass-card" style="padding:1.25rem;">
-                        <i class="fa-solid fa-chart-column" style="color:#fbbf24; font-size:1.75rem; margin-bottom:0.75rem;"></i>
-                        <h4 style="font-size:1rem;">Audit & Analytics</h4>
-                        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0.3rem;">Comprehensive subject-wise analytics with single-click CSV exports.</p>
+                    <div class="glass-card" style="padding:1.5rem;">
+                        <i class="fa-solid fa-chart-column" style="color:#fbbf24; font-size:2rem; margin-bottom:0.85rem; display:inline-block;"></i>
+                        <h4 style="font-size:1.1rem;">Audit & Analytics</h4>
+                        <p style="font-size:0.88rem; color:var(--text-secondary); margin-top:0.4rem; line-height:1.55;">Comprehensive subject-wise analytics with single-click CSV exports and audit trail logging.</p>
                     </div>
                 </div>
             </div>
         `;
+
+        // Initialize 3D Tilt Physics
+        if (typeof ThreeD_Engine !== "undefined") {
+            ThreeD_Engine.initCards();
+        }
     }
 
     /* ==========================================================================
@@ -553,25 +621,7 @@ const app = (function () {
                     </button>
                 </form>
 
-                <!-- Quick Demo Fillers -->
-                <div style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--border-subtle); text-align:center;">
-                    <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">
-                        Demo Student Accounts (Password: student123)
-                    </div>
-                    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:center;">
-                        <button class="btn btn-sm btn-secondary" style="font-size:0.78rem;" onclick="app.quickFillStudent('rahul@example.com')">
-                            Rahul (Pending Face)
-                        </button>
-                        <button class="btn btn-sm btn-secondary" style="font-size:0.78rem;" onclick="app.quickFillStudent('priya@example.com')">
-                            Priya (Verified Face)
-                        </button>
-                        <button class="btn btn-sm btn-secondary" style="font-size:0.78rem;" onclick="app.quickFillStudent('sneha@example.com')">
-                            Sneha (Unregistered)
-                        </button>
-                    </div>
-                </div>
-
-                <div style="text-align:center; margin-top:1.5rem; font-size:0.9rem; color:var(--text-secondary);">
+                <div style="text-align:center; margin-top:1.75rem; font-size:0.9rem; color:var(--text-secondary);">
                     Don't have an account? <a href="/register" style="color:var(--brand-primary); font-weight:600; text-decoration:none;" onclick="app.navigate('/register'); return false;">Register here</a>
                 </div>
             </div>
@@ -1465,7 +1515,7 @@ const app = (function () {
                         <div class="stat-icon" style="background:rgba(56,189,248,0.15); color:var(--brand-primary);"><i class="fa-solid fa-percent"></i></div>
                         <div class="stat-info">
                             <span class="stat-label">Overall Rate</span>
-                            <span class="stat-value" style="color:var(--brand-primary);">${metrics.overall_attendance_percentage}%</span>
+                            <span class="stat-value" style="color:var(--brand-primary);">${(metrics.total_students > 0 && metrics.overall_attendance_percentage != null) ? metrics.overall_attendance_percentage : 0}%</span>
                         </div>
                     </div>
                 </div>
@@ -2981,10 +3031,10 @@ const app = (function () {
                             <tbody>
                                 ${logs.length > 0 ? logs.map(l => `
                                     <tr>
-                                        <td style="white-space:nowrap; font-size:0.85rem; color:var(--text-secondary);">${l.created_at}</td>
-                                        <td><span class="status-badge badge-verified" style="font-family:var(--font-mono); font-size:0.75rem;">${l.action_type}</span></td>
-                                        <td>${l.details}</td>
-                                        <td><strong>${l.user_email || "System"}</strong></td>
+                                        <td style="white-space:nowrap; font-size:0.85rem; color:var(--text-secondary);">${l.timestamp || l.created_at || "—"}</td>
+                                        <td><span class="status-badge ${l.action && l.action.includes('DELETE') ? 'badge-rejected' : 'badge-verified'}" style="font-family:var(--font-mono); font-size:0.75rem;">${l.action || l.action_type || "EVENT"}</span></td>
+                                        <td>${l.details || "—"}</td>
+                                        <td><strong>${l.username || l.email || l.user_email || "System"}</strong></td>
                                         <td><code style="font-size:0.78rem;">${l.ip_address || "127.0.0.1"}</code></td>
                                     </tr>
                                 `).join("") : `
@@ -3118,6 +3168,7 @@ const app = (function () {
             showToast(err.message, "error");
         }
     }
+    const renderAdminSecurity = renderAdminSettings;
 
     // Timeframe selector handler for student dashboard
     function setStudentDashboardTimeframe(tab) {

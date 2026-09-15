@@ -50,7 +50,7 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
         rec_stats = cursor.fetchone()
         tot_recs = rec_stats["total_records"] or 0
         pres_recs = rec_stats["present_records"] or 0
-        overall_attendance_pct = round((pres_recs / tot_recs * 100.0), 1) if tot_recs > 0 else 85.0
+        overall_attendance_pct = round((pres_recs / tot_recs * 100.0), 1) if (tot_recs > 0 and total_students > 0) else 0.0
         
         # 5. Pending face list preview for dashboard widget
         cursor.execute("""
