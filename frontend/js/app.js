@@ -2205,7 +2205,7 @@ const app = (function () {
     /* ==========================================================================
        VIEW: Admin Subjects (/admin/subjects) - Branch-Wise Curriculum Control
        ========================================================================== */
-    const BRANCH_OPTIONS = [
+    const DEFAULT_BRANCH_OPTIONS = [
         "Computer Engineering",
         "Information Technology",
         "Electronics & Telecom",
@@ -2221,6 +2221,44 @@ const app = (function () {
         if (container) renderAdminSubjects(container);
     }
 
+    function promptAddNewBranch() {
+        showModal(
+            "Add New Engineering Branch / Department",
+            `
+                <div class="form-group">
+                    <label class="form-label">Branch / Department Name</label>
+                    <input type="text" id="modal-new-branch-name" class="form-control" placeholder="e.g. Aeronautical Engineering, Chemical Engineering" required>
+                    <div class="form-hint" style="margin-top:0.4rem;">Once added, you can immediately schedule and assign curriculum subjects to this branch.</div>
+                </div>
+            `,
+            `
+                <button class="btn btn-secondary btn-sm" onclick="app.closeModal()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="app.confirmAddNewBranch()"><i class="fa-solid fa-plus"></i> Create Branch</button>
+            `
+        );
+    }
+
+    function confirmAddNewBranch() {
+        const branchName = document.getElementById("modal-new-branch-name").value.trim();
+        if (!branchName) return showToast("Branch name is required.", "warning");
+
+        closeModal();
+        if (!window._customBranches) window._customBranches = [];
+        if (!window._customBranches.includes(branchName)) {
+            window._customBranches.push(branchName);
+        }
+        adminSubjectBranchFilter = branchName;
+        showToast(`Branch '${branchName}' created! Now add its subjects.`, "success");
+        
+        const container = document.getElementById("app-viewport");
+        if (container) renderAdminSubjects(container);
+
+        // Immediately open Add Subject for this new branch
+        setTimeout(() => {
+            promptAddSubject(branchName);
+        }, 200);
+    }
+
     async function renderAdminSubjects(container) {
         container.innerHTML = `
             <div class="loading-state">
@@ -2234,20 +2272,25 @@ const app = (function () {
             const allSubjects = data.subjects || [];
             window._allAdminSubjects = allSubjects;
 
+            // Merge default branches, existing subjects' branches, and custom branches
+            const customBranches = window._customBranches || [];
+            const existingDepts = allSubjects.map(s => s.department).filter(Boolean);
+            const activeBranches = Array.from(new Set([...DEFAULT_BRANCH_OPTIONS, ...existingDepts, ...customBranches]));
+
             // Calculate counts per branch
             const branchCounts = { "All": allSubjects.length };
-            BRANCH_OPTIONS.forEach(b => { branchCounts[b] = 0; });
+            activeBranches.forEach(b => { branchCounts[b] = 0; });
             allSubjects.forEach(s => {
-                const dept = s.department || "All Branches";
+                const dept = (s.department || "").trim();
                 let matched = false;
-                for (const b of BRANCH_OPTIONS) {
+                for (const b of activeBranches) {
                     if (b.toLowerCase() === dept.toLowerCase() || (b === "All Branches" && (dept.toLowerCase().includes("all") || dept.toLowerCase().includes("common")))) {
                         branchCounts[b] = (branchCounts[b] || 0) + 1;
                         matched = true;
                         break;
                     }
                 }
-                if (!matched) {
+                if (!matched && dept) {
                     branchCounts[dept] = (branchCounts[dept] || 0) + 1;
                 }
             });
@@ -2267,10 +2310,11 @@ const app = (function () {
                 }
             }
 
+            const currentBranchName = adminSubjectBranchFilter === "All" ? "Curriculum" : adminSubjectBranchFilter;
+
             const rowsHtml = filteredSubjects.length > 0 ? filteredSubjects.map(s => {
                 const safeName = (s.name || '').replace(/'/g, "\\'");
                 const safeCode = (s.code || '').replace(/'/g, "\\'");
-                const safeDept = (s.department || '').replace(/'/g, "\\'");
                 return `
                 <tr>
                     <td><strong style="font-family:var(--font-heading); color:var(--brand-primary); font-size:1rem;">${s.code}</strong></td>
@@ -2279,7 +2323,7 @@ const app = (function () {
                     <td><span style="font-size:0.85rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:0.2rem 0.55rem; border-radius:4px;">Semester ${s.semester}</span></td>
                     <td>
                         <div style="display:flex; gap:0.4rem; align-items:center;">
-                            <button class="btn btn-sm btn-secondary" title="Edit Subject & Branch Assignment" onclick="app.promptEditSubject(${s.id})">
+                            <button class="btn btn-sm btn-secondary" title="Edit Subject Details" onclick="app.promptEditSubject(${s.id})">
                                 <i class="fa-solid fa-pen-to-square"></i> Edit
                             </button>
                             <button class="btn btn-sm btn-danger" title="Remove Subject" onclick="app.deleteSubjectItem(${s.id}, '${safeCode}')">
@@ -2290,55 +2334,73 @@ const app = (function () {
                 </tr>
             `}).join("") : `
                 <tr>
-                    <td colspan="5" style="text-align:center; padding:3rem 1.5rem; color:var(--text-muted);">
-                        <i class="fa-solid fa-book-open" style="font-size:2.5rem; color:var(--brand-primary); margin-bottom:0.75rem; opacity:0.5;"></i>
-                        <h4 style="color:var(--text-primary); margin-bottom:0.3rem;">No subjects in ${adminSubjectBranchFilter}</h4>
-                        <p style="font-size:0.88rem;">Click <strong>Add New Subject</strong> to assign subjects for this engineering branch.</p>
+                    <td colspan="5" style="text-align:center; padding:3.5rem 1.5rem; color:var(--text-muted);">
+                        <i class="fa-solid fa-folder-open" style="font-size:2.8rem; color:var(--brand-primary); margin-bottom:1rem; opacity:0.5;"></i>
+                        <h4 style="color:var(--text-primary); margin-bottom:0.4rem;">No subjects added to ${currentBranchName} yet</h4>
+                        <p style="font-size:0.88rem; max-width:440px; margin:0 auto 1.25rem;">As Administrator, you have full control to assign and create curriculum subjects for this branch.</p>
+                        <button class="btn btn-primary btn-sm" onclick="app.promptAddSubject('${adminSubjectBranchFilter !== 'All' ? adminSubjectBranchFilter : 'Computer Engineering'}')">
+                            <i class="fa-solid fa-plus"></i> Add Subject to ${currentBranchName}
+                        </button>
                     </td>
                 </tr>
             `;
 
+            // Build branch filter pills dynamically
+            const branchPillsHtml = [
+                `<button class="branch-filter-pill ${adminSubjectBranchFilter === 'All' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('All')">
+                    <i class="fa-solid fa-layer-group"></i> All Branches (${allSubjects.length})
+                </button>`,
+                ...activeBranches.filter(b => b !== "All Branches").map(b => `
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === b ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('${b}')">
+                        ${getDeptBadge(b)} (${branchCounts[b] || 0})
+                    </button>
+                `),
+                `<button class="branch-filter-pill ${adminSubjectBranchFilter === 'All Branches' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('All Branches')">
+                    <i class="fa-solid fa-globe"></i> Common Curriculum (${branchCounts['All Branches'] || 0})
+                </button>`,
+                `<button class="branch-filter-pill" style="border-style:dashed; color:var(--brand-primary); border-color:rgba(56,189,248,0.4);" onclick="app.promptAddNewBranch()">
+                    <i class="fa-solid fa-plus"></i> New Branch
+                </button>`
+            ].join("");
+
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
                     <div>
-                        <h2>Branch-Wise Curriculum Subjects</h2>
-                        <p style="color:var(--text-secondary); font-size:0.92rem;">Assign and manage academic subjects department by department for attendance sessions.</p>
+                        <h2>Branch Curriculum Manager</h2>
+                        <p style="color:var(--text-secondary); font-size:0.92rem;">Empowers you as Administrator to assign, organize, and schedule curriculum subjects branch by branch.</p>
                     </div>
-                    <button class="btn btn-primary btn-sm" onclick="app.promptAddSubject()">
-                        <i class="fa-solid fa-plus"></i> Add New Subject
-                    </button>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                        <button class="btn btn-outline btn-sm" onclick="app.promptAddNewBranch()">
+                            <i class="fa-solid fa-folder-plus"></i> New Branch
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="app.promptAddSubject('${adminSubjectBranchFilter !== 'All' ? adminSubjectBranchFilter : 'Computer Engineering'}')">
+                            <i class="fa-solid fa-plus"></i> Add Subject to ${currentBranchName}
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Branch Filter Tab Navigation -->
                 <div class="branch-filter-nav">
-                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'All' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('All')">
-                        <i class="fa-solid fa-layer-group"></i> All Branches (${allSubjects.length})
-                    </button>
-                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Computer Engineering' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Computer Engineering')">
-                        <i class="fa-solid fa-laptop-code"></i> Computer Engg (${branchCounts['Computer Engineering'] || 0})
-                    </button>
-                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Information Technology' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Information Technology')">
-                        <i class="fa-solid fa-network-wired"></i> Info Tech (${branchCounts['Information Technology'] || 0})
-                    </button>
-                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Electronics & Telecom' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Electronics & Telecom')">
-                        <i class="fa-solid fa-microchip"></i> Electronics & TC (${branchCounts['Electronics & Telecom'] || 0})
-                    </button>
-                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Mechanical Engineering' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Mechanical Engineering')">
-                        <i class="fa-solid fa-gears"></i> Mechanical Engg (${branchCounts['Mechanical Engineering'] || 0})
-                    </button>
-                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'All Branches' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('All Branches')">
-                        <i class="fa-solid fa-globe"></i> Common Curriculum (${branchCounts['All Branches'] || 0})
-                    </button>
+                    ${branchPillsHtml}
                 </div>
 
                 <div class="glass-panel" style="padding:1.5rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                        <div style="font-size:0.9rem; color:var(--text-secondary);">
+                            Showing subjects for: <strong style="color:var(--text-primary);">${currentBranchName}</strong> (${filteredSubjects.length} subjects found)
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="app.promptAddSubject('${adminSubjectBranchFilter !== 'All' ? adminSubjectBranchFilter : 'Computer Engineering'}')">
+                            <i class="fa-solid fa-plus"></i> Add Subject to ${currentBranchName}
+                        </button>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="custom-table">
                             <thead>
                                 <tr>
                                     <th>Subject Code</th>
                                     <th>Subject Title</th>
-                                    <th>Assigned Branch / Dept</th>
+                                    <th>Branch / Department</th>
                                     <th>Semester</th>
                                     <th>Actions</th>
                                 </tr>
@@ -2355,15 +2417,23 @@ const app = (function () {
         }
     }
 
-    function promptAddSubject() {
-        const defaultBranch = (adminSubjectBranchFilter && adminSubjectBranchFilter !== "All") ? adminSubjectBranchFilter : "Computer Engineering";
+    function promptAddSubject(preferredBranch) {
+        const customBranches = window._customBranches || [];
+        const existingDepts = (window._allAdminSubjects || []).map(s => s.department).filter(Boolean);
+        const branchList = Array.from(new Set([...DEFAULT_BRANCH_OPTIONS, ...existingDepts, ...customBranches]));
+
+        const defaultBranch = preferredBranch || (adminSubjectBranchFilter && adminSubjectBranchFilter !== "All" ? adminSubjectBranchFilter : "Computer Engineering");
         
+        const branchOptionsHtml = branchList.map(b => 
+            `<option value="${b}" ${b.toLowerCase() === defaultBranch.toLowerCase() ? 'selected' : ''}>${b}</option>`
+        ).join("");
+
         showModal(
-            "Add New Academic Subject",
+            `Add Subject to ${defaultBranch === 'All Branches' ? 'Common Curriculum' : defaultBranch}`,
             `
                 <div class="form-group">
-                    <label class="form-label">Subject Code (e.g. IT501)</label>
-                    <input type="text" id="modal-sub-code" class="form-control" placeholder="e.g. IT501, CS302, ME504" required>
+                    <label class="form-label">Subject Code (e.g. IT501, CS302, ME504)</label>
+                    <input type="text" id="modal-sub-code" class="form-control" placeholder="e.g. IT501" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Subject Title</label>
@@ -2373,13 +2443,7 @@ const app = (function () {
                     <div class="form-group">
                         <label class="form-label">Assign to Branch / Department</label>
                         <select id="modal-sub-dept" class="form-control" required>
-                            <option value="Computer Engineering" ${defaultBranch === 'Computer Engineering' ? 'selected' : ''}>Computer Engineering</option>
-                            <option value="Information Technology" ${defaultBranch === 'Information Technology' ? 'selected' : ''}>Information Technology</option>
-                            <option value="Electronics & Telecom" ${defaultBranch === 'Electronics & Telecom' ? 'selected' : ''}>Electronics & Telecom</option>
-                            <option value="Mechanical Engineering" ${defaultBranch === 'Mechanical Engineering' ? 'selected' : ''}>Mechanical Engineering</option>
-                            <option value="AI & Data Science" ${defaultBranch === 'AI & Data Science' ? 'selected' : ''}>AI & Data Science</option>
-                            <option value="Civil Engineering" ${defaultBranch === 'Civil Engineering' ? 'selected' : ''}>Civil Engineering</option>
-                            <option value="All Branches" ${defaultBranch === 'All Branches' ? 'selected' : ''}>All Branches (Common Curriculum)</option>
+                            ${branchOptionsHtml}
                         </select>
                     </div>
                     <div class="form-group">
@@ -2409,6 +2473,8 @@ const app = (function () {
         try {
             const res = await api.createSubject({ code, name, department: dept, semester: sem });
             showToast(res.message, "success");
+            // Set current filter to this branch so admin immediately sees their newly created subject
+            adminSubjectBranchFilter = dept;
             renderAdminSubjects(document.getElementById("app-viewport"));
         } catch (err) {
             showToast(err.message, "error");
@@ -2419,6 +2485,14 @@ const app = (function () {
         const subjects = window._allAdminSubjects || [];
         const sub = subjects.find(s => s.id === id);
         if (!sub) return showToast("Subject details could not be found.", "error");
+
+        const customBranches = window._customBranches || [];
+        const existingDepts = subjects.map(s => s.department).filter(Boolean);
+        const branchList = Array.from(new Set([...DEFAULT_BRANCH_OPTIONS, ...existingDepts, ...customBranches]));
+
+        const branchOptionsHtml = branchList.map(b => 
+            `<option value="${b}" ${b.toLowerCase() === (sub.department || '').toLowerCase() ? 'selected' : ''}>${b}</option>`
+        ).join("");
 
         showModal(
             `Edit Subject: ${sub.code}`,
@@ -2435,13 +2509,7 @@ const app = (function () {
                     <div class="form-group">
                         <label class="form-label">Branch / Department</label>
                         <select id="modal-edit-sub-dept" class="form-control" required>
-                            <option value="Computer Engineering" ${sub.department === 'Computer Engineering' ? 'selected' : ''}>Computer Engineering</option>
-                            <option value="Information Technology" ${sub.department === 'Information Technology' ? 'selected' : ''}>Information Technology</option>
-                            <option value="Electronics & Telecom" ${sub.department === 'Electronics & Telecom' ? 'selected' : ''}>Electronics & Telecom</option>
-                            <option value="Mechanical Engineering" ${sub.department === 'Mechanical Engineering' ? 'selected' : ''}>Mechanical Engineering</option>
-                            <option value="AI & Data Science" ${sub.department === 'AI & Data Science' ? 'selected' : ''}>AI & Data Science</option>
-                            <option value="Civil Engineering" ${sub.department === 'Civil Engineering' ? 'selected' : ''}>Civil Engineering</option>
-                            <option value="All Branches" ${sub.department === 'All Branches' ? 'selected' : ''}>All Branches (Common Curriculum)</option>
+                            ${branchOptionsHtml}
                         </select>
                     </div>
                     <div class="form-group">
@@ -3487,6 +3555,8 @@ const app = (function () {
         confirmAddSubject,
         promptEditSubject,
         confirmEditSubject,
+        promptAddNewBranch,
+        confirmAddNewBranch,
         filterAdminSubjectsByBranch,
         deleteSubjectItem,
         promptCreateSession,

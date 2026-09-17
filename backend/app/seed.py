@@ -23,39 +23,13 @@ def seed_database():
         else:
             admin_id = admin_user["id"]
 
-        # 2. Seed Default Subjects for All Engineering Branches
+        # 2. Initial Default Subjects (Computer Engineering only; all other branches are assigned and managed directly by the Administrator)
         subjects_data = [
-            # Computer Engineering (CSE)
             ("DBMS", "Database Management Systems", "Computer Engineering", 5),
             ("CN", "Computer Networks", "Computer Engineering", 5),
             ("OS", "Operating Systems", "Computer Engineering", 5),
             ("JAVA", "Java Programming", "Computer Engineering", 5),
             ("AI", "Artificial Intelligence & ML", "Computer Engineering", 5),
-
-            # Information Technology (IT)
-            ("WAD", "Web Application Development", "Information Technology", 5),
-            ("CNS", "Cryptography & Network Security", "Information Technology", 5),
-            ("CC", "Cloud Computing & DevOps", "Information Technology", 5),
-            ("BDA", "Big Data Analytics", "Information Technology", 5),
-            ("SE", "Software Engineering & Agile", "Information Technology", 5),
-
-            # Electronics & Telecom (ENTC)
-            ("DSP", "Digital Signal Processing", "Electronics & Telecom", 5),
-            ("VLSI", "CMOS VLSI Design", "Electronics & Telecom", 5),
-            ("EMFT", "Electromagnetic Fields & Antennas", "Electronics & Telecom", 5),
-            ("MC", "Microcontrollers & Embedded Systems", "Electronics & Telecom", 5),
-            ("CS", "Control Systems Engineering", "Electronics & Telecom", 5),
-
-            # Mechanical Engineering (MECH)
-            ("TOM", "Theory of Machines", "Mechanical Engineering", 5),
-            ("HT", "Heat & Mass Transfer", "Mechanical Engineering", 5),
-            ("DME", "Design of Machine Elements", "Mechanical Engineering", 5),
-            ("MFG", "Advanced Manufacturing Technology", "Mechanical Engineering", 5),
-            ("CAD", "CAD/CAM & Finite Element Analysis", "Mechanical Engineering", 5),
-
-            # All Branches / Common Curriculum
-            ("PEHV", "Professional Ethics & Human Values", "All Branches", 1),
-            ("CSK", "Communication & Soft Skills", "All Branches", 1),
         ]
         
         for code, name, dept, sem in subjects_data:
@@ -65,11 +39,6 @@ def seed_database():
                     INSERT INTO subjects (code, name, department, semester)
                     VALUES (?, ?, ?, ?)
                 """, (code, name, dept, sem))
-            else:
-                # Update department to ensure branch assignment is accurate
-                cursor.execute("""
-                    UPDATE subjects SET department = ?, name = ?, semester = ? WHERE code = ?
-                """, (dept, name, sem, code))
         
         # 3. Seed Default System Settings
         settings_data = [
