@@ -8,6 +8,19 @@ const app = (function () {
     let istClockInterval = null;
     let studentDashboardTimeframe = "all"; // 'all', 'week', 'month', 'day'
     let studentAttendanceFilter = { timeframe: "all", week: "", month: "", subjectId: "" };
+    let adminSubjectBranchFilter = "All"; // Branch filter for curriculum subjects view
+
+    // Branch Badge Helper for Cyber UI
+    function getDeptBadge(dept) {
+        const d = (dept || "").toLowerCase();
+        if (d.includes("computer")) return `<span class="dept-badge badge-cse"><i class="fa-solid fa-laptop-code"></i> Computer Engg</span>`;
+        if (d.includes("information") || d.includes("it")) return `<span class="dept-badge badge-it"><i class="fa-solid fa-network-wired"></i> Info Tech</span>`;
+        if (d.includes("telecom") || d.includes("electronic") || d.includes("entc")) return `<span class="dept-badge badge-entc"><i class="fa-solid fa-microchip"></i> Electronics & TC</span>`;
+        if (d.includes("mech")) return `<span class="dept-badge badge-mech"><i class="fa-solid fa-gears"></i> Mechanical Engg</span>`;
+        if (d.includes("data") || d.includes("ai")) return `<span class="dept-badge badge-aids"><i class="fa-solid fa-brain"></i> AI & Data Sci</span>`;
+        if (d.includes("civil")) return `<span class="dept-badge badge-civil"><i class="fa-solid fa-trowel-bricks"></i> Civil Engg</span>`;
+        return `<span class="dept-badge badge-all"><i class="fa-solid fa-globe"></i> ${dept || 'Common'}</span>`;
+    }
 
     // Real-Time IST Digital Clock (Asia/Kolkata / UTC+5:30)
     function startLiveISTClock() {
@@ -825,27 +838,47 @@ const app = (function () {
             }
 
             // Subject rows html (All time)
-            const subjectRowsHtml = subjects.map(s => `
-                <div class="glass-card" style="padding:1.25rem; margin-bottom:1rem;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+            const isVerified = (st.face_status === "verified");
+            const subjectRowsHtml = subjects.length > 0 ? subjects.map(s => {
+                const subBadge = getDeptBadge(s.department || st.department);
+                let statusNotice = "";
+                if (!isVerified) {
+                    statusNotice = `<div style="font-size:0.75rem; color:var(--status-pending); margin-top:0.35rem;"><i class="fa-solid fa-hourglass-half"></i> Face review pending — attendance tracking inactive</div>`;
+                }
+                
+                return `
+                <div class="glass-card subject-academic-card" style="padding:1.25rem; margin-bottom:1rem; position:relative; overflow:hidden;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
                         <div>
-                            <strong style="font-size:1.05rem; font-family:var(--font-heading);">${s.code}</strong>
-                            <span style="color:var(--text-secondary); font-size:0.88rem; margin-left:0.5rem;">— ${s.name}</span>
+                            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                                <strong style="font-size:1.1rem; font-family:var(--font-heading); color:var(--brand-primary);">${s.code}</strong>
+                                ${subBadge}
+                                ${s.semester ? `<span style="font-size:0.75rem; color:var(--text-muted); background:rgba(255,255,255,0.05); padding:0.15rem 0.45rem; border-radius:4px;">Sem ${s.semester}</span>` : ''}
+                            </div>
+                            <div style="color:var(--text-primary); font-size:0.95rem; font-weight:600; margin-top:0.35rem;">${s.name}</div>
+                            ${statusNotice}
                         </div>
-                        <span style="font-weight:800; font-family:var(--font-heading); font-size:1.15rem; color:${s.percentage >= 75 ? 'var(--status-verified)' : (s.total === 0 ? 'var(--text-muted)' : '#ef4444')};">
+                        <span style="font-weight:800; font-family:var(--font-heading); font-size:1.25rem; color:${s.percentage >= 75 ? 'var(--status-verified)' : (s.total === 0 ? 'var(--text-muted)' : '#ef4444')};">
                             ${s.percentage}%
                         </span>
                     </div>
                     <!-- Progress bar -->
                     <div style="width:100%; height:8px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-bottom:0.5rem;">
-                        <div style="width:${s.percentage}%; height:100%; background:${s.percentage >= 75 ? 'linear-gradient(90deg, #10b981, #38bdf8)' : 'linear-gradient(90deg, #ef4444, #f59e0b)'}; border-radius:4px;"></div>
+                        <div style="width:${s.percentage}%; height:100%; background:${s.percentage >= 75 ? 'linear-gradient(90deg, #10b981, #38bdf8)' : (s.total === 0 ? 'rgba(255,255,255,0.08)' : 'linear-gradient(90deg, #ef4444, #f59e0b)')}; border-radius:4px;"></div>
                     </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.82rem; color:var(--text-muted);">
+                    <div style="display:flex; justify-content:space-between; font-size:0.84rem; color:var(--text-muted);">
                         <span>Attended: <strong style="color:var(--text-primary);">${s.attended}</strong> / ${s.total}</span>
                         <span>Missed: <strong style="color:${s.missed > 0 ? '#ef4444' : 'var(--text-muted)'};">${s.missed}</strong></span>
                     </div>
                 </div>
-            `).join("");
+            `;
+            }).join("") : `
+                <div class="glass-card" style="text-align:center; padding:3rem 1.5rem; color:var(--text-muted);">
+                    <i class="fa-solid fa-graduation-cap" style="font-size:2.5rem; color:var(--brand-primary); margin-bottom:0.75rem; opacity:0.6;"></i>
+                    <h4 style="color:var(--text-primary); margin-bottom:0.4rem;">No Subjects Scheduled Yet</h4>
+                    <p style="font-size:0.88rem;">No curriculum subjects have been assigned for <strong>${st.department || 'your branch'}</strong> yet. Your department administrator will schedule them shortly.</p>
+                </div>
+            `;
 
             // Week-wise HTML
             let weekSectionHtml = "";
@@ -1127,8 +1160,18 @@ const app = (function () {
 
                     <!-- Subject-Wise Attendance Section -->
                     <div style="margin-bottom:2.5rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                            <h3 class="section-title"><i class="fa-solid fa-chart-simple" style="color:var(--brand-primary);"></i> Subject-Wise Breakdown</h3>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:0.75rem;">
+                            <div>
+                                <h3 class="section-title" style="margin-bottom:0.25rem;">
+                                    <i class="fa-solid fa-chart-simple" style="color:var(--brand-primary);"></i> Subject-Wise Breakdown
+                                </h3>
+                                <div style="font-size:0.86rem; color:var(--text-secondary);">
+                                    Curriculum Branch: <strong style="color:var(--text-primary);">${st.department}</strong> (${subjects.length} Assigned Courses)
+                                </div>
+                            </div>
+                            <div>
+                                ${getDeptBadge(st.department)}
+                            </div>
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
                             ${subjectRowsHtml}
@@ -1504,10 +1547,13 @@ const app = (function () {
                     </div>
 
                     <div class="stat-card">
-                        <div class="stat-icon rose"><i class="fa-solid fa-calendar-xmark"></i></div>
+                        <div class="stat-icon ${metrics.absent_today > 0 ? 'rose' : 'emerald'}">
+                            <i class="fa-solid ${metrics.absent_today > 0 ? 'fa-calendar-xmark' : 'fa-circle-check'}"></i>
+                        </div>
                         <div class="stat-info">
                             <span class="stat-label">Absent Today</span>
-                            <span class="stat-value" style="color:var(--status-rejected);">${metrics.absent_today}</span>
+                            <span class="stat-value" style="color:${metrics.absent_today > 0 ? 'var(--status-rejected)' : 'var(--status-verified)'};">${metrics.absent_today}</span>
+                            ${sessions.length === 0 ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">No sessions today</div>` : ''}
                         </div>
                     </div>
 
@@ -2157,42 +2203,131 @@ const app = (function () {
     }
 
     /* ==========================================================================
-       VIEW: Admin Subjects (/admin/subjects)
+       VIEW: Admin Subjects (/admin/subjects) - Branch-Wise Curriculum Control
        ========================================================================== */
+    const BRANCH_OPTIONS = [
+        "Computer Engineering",
+        "Information Technology",
+        "Electronics & Telecom",
+        "Mechanical Engineering",
+        "AI & Data Science",
+        "Civil Engineering",
+        "All Branches"
+    ];
+
+    function filterAdminSubjectsByBranch(branch) {
+        adminSubjectBranchFilter = branch;
+        const container = document.getElementById("app-viewport");
+        if (container) renderAdminSubjects(container);
+    }
+
     async function renderAdminSubjects(container) {
         container.innerHTML = `
             <div class="loading-state">
                 <div class="scanner-spinner"></div>
-                <p>Loading curriculum subjects...</p>
+                <p>Loading curriculum subjects and branch matrix...</p>
             </div>
         `;
 
         try {
             const data = await api.getSubjects();
-            const subjects = data.subjects || [];
+            const allSubjects = data.subjects || [];
+            window._allAdminSubjects = allSubjects;
 
-            const rowsHtml = subjects.map(s => `
+            // Calculate counts per branch
+            const branchCounts = { "All": allSubjects.length };
+            BRANCH_OPTIONS.forEach(b => { branchCounts[b] = 0; });
+            allSubjects.forEach(s => {
+                const dept = s.department || "All Branches";
+                let matched = false;
+                for (const b of BRANCH_OPTIONS) {
+                    if (b.toLowerCase() === dept.toLowerCase() || (b === "All Branches" && (dept.toLowerCase().includes("all") || dept.toLowerCase().includes("common")))) {
+                        branchCounts[b] = (branchCounts[b] || 0) + 1;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    branchCounts[dept] = (branchCounts[dept] || 0) + 1;
+                }
+            });
+
+            // Filter subjects by selected branch
+            let filteredSubjects = allSubjects;
+            if (adminSubjectBranchFilter && adminSubjectBranchFilter !== "All") {
+                if (adminSubjectBranchFilter === "All Branches") {
+                    filteredSubjects = allSubjects.filter(s => {
+                        const d = (s.department || "").toLowerCase();
+                        return d.includes("all") || d.includes("common") || d === "";
+                    });
+                } else {
+                    filteredSubjects = allSubjects.filter(s => 
+                        (s.department || "").toLowerCase() === adminSubjectBranchFilter.toLowerCase()
+                    );
+                }
+            }
+
+            const rowsHtml = filteredSubjects.length > 0 ? filteredSubjects.map(s => {
+                const safeName = (s.name || '').replace(/'/g, "\\'");
+                const safeCode = (s.code || '').replace(/'/g, "\\'");
+                const safeDept = (s.department || '').replace(/'/g, "\\'");
+                return `
                 <tr>
-                    <td><strong>${s.code}</strong></td>
-                    <td>${s.name}</td>
-                    <td>${s.department}</td>
-                    <td>Semester ${s.semester}</td>
+                    <td><strong style="font-family:var(--font-heading); color:var(--brand-primary); font-size:1rem;">${s.code}</strong></td>
+                    <td><span style="font-weight:600; color:var(--text-primary);">${s.name}</span></td>
+                    <td>${getDeptBadge(s.department)}</td>
+                    <td><span style="font-size:0.85rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:0.2rem 0.55rem; border-radius:4px;">Semester ${s.semester}</span></td>
                     <td>
-                        <button class="btn btn-sm btn-danger" onclick="app.deleteSubjectItem(${s.id})">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
+                        <div style="display:flex; gap:0.4rem; align-items:center;">
+                            <button class="btn btn-sm btn-secondary" title="Edit Subject & Branch Assignment" onclick="app.promptEditSubject(${s.id})">
+                                <i class="fa-solid fa-pen-to-square"></i> Edit
+                            </button>
+                            <button class="btn btn-sm btn-danger" title="Remove Subject" onclick="app.deleteSubjectItem(${s.id}, '${safeCode}')">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
-            `).join("");
+            `}).join("") : `
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:3rem 1.5rem; color:var(--text-muted);">
+                        <i class="fa-solid fa-book-open" style="font-size:2.5rem; color:var(--brand-primary); margin-bottom:0.75rem; opacity:0.5;"></i>
+                        <h4 style="color:var(--text-primary); margin-bottom:0.3rem;">No subjects in ${adminSubjectBranchFilter}</h4>
+                        <p style="font-size:0.88rem;">Click <strong>Add New Subject</strong> to assign subjects for this engineering branch.</p>
+                    </td>
+                </tr>
+            `;
 
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
                     <div>
-                        <h2>Curriculum Subjects</h2>
-                        <p style="color:var(--text-secondary); font-size:0.92rem;">Configure academic courses and subjects for attendance tracking.</p>
+                        <h2>Branch-Wise Curriculum Subjects</h2>
+                        <p style="color:var(--text-secondary); font-size:0.92rem;">Assign and manage academic subjects department by department for attendance sessions.</p>
                     </div>
                     <button class="btn btn-primary btn-sm" onclick="app.promptAddSubject()">
                         <i class="fa-solid fa-plus"></i> Add New Subject
+                    </button>
+                </div>
+
+                <!-- Branch Filter Tab Navigation -->
+                <div class="branch-filter-nav">
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'All' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('All')">
+                        <i class="fa-solid fa-layer-group"></i> All Branches (${allSubjects.length})
+                    </button>
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Computer Engineering' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Computer Engineering')">
+                        <i class="fa-solid fa-laptop-code"></i> Computer Engg (${branchCounts['Computer Engineering'] || 0})
+                    </button>
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Information Technology' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Information Technology')">
+                        <i class="fa-solid fa-network-wired"></i> Info Tech (${branchCounts['Information Technology'] || 0})
+                    </button>
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Electronics & Telecom' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Electronics & Telecom')">
+                        <i class="fa-solid fa-microchip"></i> Electronics & TC (${branchCounts['Electronics & Telecom'] || 0})
+                    </button>
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'Mechanical Engineering' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('Mechanical Engineering')">
+                        <i class="fa-solid fa-gears"></i> Mechanical Engg (${branchCounts['Mechanical Engineering'] || 0})
+                    </button>
+                    <button class="branch-filter-pill ${adminSubjectBranchFilter === 'All Branches' ? 'active' : ''}" onclick="app.filterAdminSubjectsByBranch('All Branches')">
+                        <i class="fa-solid fa-globe"></i> Common Curriculum (${branchCounts['All Branches'] || 0})
                     </button>
                 </div>
 
@@ -2203,9 +2338,9 @@ const app = (function () {
                                 <tr>
                                     <th>Subject Code</th>
                                     <th>Subject Title</th>
-                                    <th>Department</th>
+                                    <th>Assigned Branch / Dept</th>
                                     <th>Semester</th>
-                                    <th>Action</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2221,31 +2356,43 @@ const app = (function () {
     }
 
     function promptAddSubject() {
+        const defaultBranch = (adminSubjectBranchFilter && adminSubjectBranchFilter !== "All") ? adminSubjectBranchFilter : "Computer Engineering";
+        
         showModal(
-            "Add New Subject",
+            "Add New Academic Subject",
             `
                 <div class="form-group">
-                    <label class="form-label">Subject Code (e.g. CS306)</label>
-                    <input type="text" id="modal-sub-code" class="form-control" placeholder="e.g. CS306" required>
+                    <label class="form-label">Subject Code (e.g. IT501)</label>
+                    <input type="text" id="modal-sub-code" class="form-control" placeholder="e.g. IT501, CS302, ME504" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Subject Name</label>
-                    <input type="text" id="modal-sub-name" class="form-control" placeholder="e.g. Cloud Computing" required>
+                    <label class="form-label">Subject Title</label>
+                    <input type="text" id="modal-sub-name" class="form-control" placeholder="e.g. Cloud Computing & DevOps" required>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Department</label>
-                        <input type="text" id="modal-sub-dept" class="form-control" value="Computer Engineering" required>
+                        <label class="form-label">Assign to Branch / Department</label>
+                        <select id="modal-sub-dept" class="form-control" required>
+                            <option value="Computer Engineering" ${defaultBranch === 'Computer Engineering' ? 'selected' : ''}>Computer Engineering</option>
+                            <option value="Information Technology" ${defaultBranch === 'Information Technology' ? 'selected' : ''}>Information Technology</option>
+                            <option value="Electronics & Telecom" ${defaultBranch === 'Electronics & Telecom' ? 'selected' : ''}>Electronics & Telecom</option>
+                            <option value="Mechanical Engineering" ${defaultBranch === 'Mechanical Engineering' ? 'selected' : ''}>Mechanical Engineering</option>
+                            <option value="AI & Data Science" ${defaultBranch === 'AI & Data Science' ? 'selected' : ''}>AI & Data Science</option>
+                            <option value="Civil Engineering" ${defaultBranch === 'Civil Engineering' ? 'selected' : ''}>Civil Engineering</option>
+                            <option value="All Branches" ${defaultBranch === 'All Branches' ? 'selected' : ''}>All Branches (Common Curriculum)</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Semester</label>
-                        <input type="number" id="modal-sub-sem" class="form-control" value="5" min="1" max="8" required>
+                        <select id="modal-sub-sem" class="form-control" required>
+                            ${[1,2,3,4,5,6,7,8].map(s => `<option value="${s}" ${s === 5 ? 'selected' : ''}>Semester ${s}</option>`).join("")}
+                        </select>
                     </div>
                 </div>
             `,
             `
                 <button class="btn btn-secondary btn-sm" onclick="app.closeModal()">Cancel</button>
-                <button class="btn btn-primary btn-sm" onclick="app.confirmAddSubject()">Save Subject</button>
+                <button class="btn btn-primary btn-sm" onclick="app.confirmAddSubject()"><i class="fa-solid fa-save"></i> Save Subject</button>
             `
         );
     }
@@ -2256,7 +2403,7 @@ const app = (function () {
         const dept = document.getElementById("modal-sub-dept").value.trim();
         const sem = parseInt(document.getElementById("modal-sub-sem").value) || 1;
 
-        if (!code || !name) return showToast("Subject Code and Name are required.", "warning");
+        if (!code || !name) return showToast("Subject Code and Title are required.", "warning");
 
         closeModal();
         try {
@@ -2268,8 +2415,70 @@ const app = (function () {
         }
     }
 
-    async function deleteSubjectItem(id) {
-        if (!confirm("Are you sure you want to remove this subject?")) return;
+    function promptEditSubject(id) {
+        const subjects = window._allAdminSubjects || [];
+        const sub = subjects.find(s => s.id === id);
+        if (!sub) return showToast("Subject details could not be found.", "error");
+
+        showModal(
+            `Edit Subject: ${sub.code}`,
+            `
+                <div class="form-group">
+                    <label class="form-label">Subject Code</label>
+                    <input type="text" id="modal-edit-sub-code" class="form-control" value="${sub.code}" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Subject Title</label>
+                    <input type="text" id="modal-edit-sub-name" class="form-control" value="${sub.name}" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Branch / Department</label>
+                        <select id="modal-edit-sub-dept" class="form-control" required>
+                            <option value="Computer Engineering" ${sub.department === 'Computer Engineering' ? 'selected' : ''}>Computer Engineering</option>
+                            <option value="Information Technology" ${sub.department === 'Information Technology' ? 'selected' : ''}>Information Technology</option>
+                            <option value="Electronics & Telecom" ${sub.department === 'Electronics & Telecom' ? 'selected' : ''}>Electronics & Telecom</option>
+                            <option value="Mechanical Engineering" ${sub.department === 'Mechanical Engineering' ? 'selected' : ''}>Mechanical Engineering</option>
+                            <option value="AI & Data Science" ${sub.department === 'AI & Data Science' ? 'selected' : ''}>AI & Data Science</option>
+                            <option value="Civil Engineering" ${sub.department === 'Civil Engineering' ? 'selected' : ''}>Civil Engineering</option>
+                            <option value="All Branches" ${sub.department === 'All Branches' ? 'selected' : ''}>All Branches (Common Curriculum)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Semester</label>
+                        <select id="modal-edit-sub-sem" class="form-control" required>
+                            ${[1,2,3,4,5,6,7,8].map(s => `<option value="${s}" ${s === sub.semester ? 'selected' : ''}>Semester ${s}</option>`).join("")}
+                        </select>
+                    </div>
+                </div>
+            `,
+            `
+                <button class="btn btn-secondary btn-sm" onclick="app.closeModal()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="app.confirmEditSubject(${id})"><i class="fa-solid fa-check"></i> Update Subject</button>
+            `
+        );
+    }
+
+    async function confirmEditSubject(id) {
+        const code = document.getElementById("modal-edit-sub-code").value.trim();
+        const name = document.getElementById("modal-edit-sub-name").value.trim();
+        const dept = document.getElementById("modal-edit-sub-dept").value.trim();
+        const sem = parseInt(document.getElementById("modal-edit-sub-sem").value) || 1;
+
+        if (!code || !name) return showToast("Subject Code and Title are required.", "warning");
+
+        closeModal();
+        try {
+            const res = await api.updateSubject(id, { code, name, department: dept, semester: sem });
+            showToast(res.message, "success");
+            renderAdminSubjects(document.getElementById("app-viewport"));
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function deleteSubjectItem(id, code = "") {
+        if (!confirm(`Are you sure you want to remove subject ${code || id}?`)) return;
         try {
             const res = await api.deleteSubject(id);
             showToast(res.message, "info");
@@ -2418,7 +2627,7 @@ const app = (function () {
                 <div class="form-group">
                     <label class="form-label">Subject</label>
                     <select id="modal-ses-subject" class="form-control">
-                        ${subjects.length > 0 ? subjects.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join("") : `<option value="1">DBMS - Database Management</option>`}
+                        ${subjects.length > 0 ? subjects.map(s => `<option value="${s.id}">[${s.department}] ${s.code} — ${s.name}</option>`).join("") : `<option value="1">DBMS — Database Management Systems</option>`}
                     </select>
                 </div>
                 <div class="form-group">
@@ -3276,6 +3485,9 @@ const app = (function () {
         deleteStudentAccount,
         promptAddSubject,
         confirmAddSubject,
+        promptEditSubject,
+        confirmEditSubject,
+        filterAdminSubjectsByBranch,
         deleteSubjectItem,
         promptCreateSession,
         confirmCreateSession,

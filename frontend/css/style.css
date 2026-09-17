@@ -1174,3 +1174,96 @@ select.form-control option {
     }
 }
 
+/* Branch & Curriculum Department Badges */
+.dept-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.28rem 0.65rem;
+    border-radius: var(--radius-full);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+.dept-badge.badge-cse {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.dept-badge.badge-it {
+    background: rgba(168, 85, 247, 0.12);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+.dept-badge.badge-entc {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.dept-badge.badge-mech {
+    background: rgba(244, 63, 94, 0.12);
+    color: #fb7185;
+    border: 1px solid rgba(244, 63, 94, 0.3);
+}
+.dept-badge.badge-aids {
+    background: rgba(99, 102, 241, 0.14);
+    color: #818cf8;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+.dept-badge.badge-civil {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.dept-badge.badge-all {
+    background: rgba(148, 163, 184, 0.12);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+/* Branch Filter Navigation Tabs */
+.branch-filter-nav {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.25rem;
+    scrollbar-width: thin;
+}
+.branch-filter-pill {
+    padding: 0.45rem 1rem;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.branch-filter-pill:hover {
+    background: rgba(56, 189, 248, 0.08);
+    color: var(--text-primary);
+    border-color: rgba(56, 189, 248, 0.3);
+}
+.branch-filter-pill.active {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2));
+    border-color: var(--brand-primary);
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+/* Subject Card Refinements */
+.subject-academic-card {
+    transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+.subject-academic-card:hover {
+    border-color: rgba(56, 189, 248, 0.4);
+    transform: translateY(-2px);
+}
+

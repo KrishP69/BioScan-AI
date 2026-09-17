@@ -43,10 +43,23 @@ def get_student_dashboard(current_user: Dict[str, Any] = Depends(require_student
         pending_row = cursor.fetchone()
         latest_submission = dict(pending_row) if pending_row else None
         
-        # 3. Subject-wise attendance calculation
+        # 3. Subject-wise attendance calculation strictly for the student's department/branch
+        student_dept = (fresh_student.get("department") or "").strip()
+        is_verified = (fresh_student.get("face_status") == "verified")
+        
         cursor.execute("""
-            SELECT id, code, name, department, semester FROM subjects ORDER BY name ASC
-        """)
+            SELECT id, code, name, department, semester 
+            FROM subjects 
+            WHERE (
+                LOWER(TRIM(department)) = LOWER(TRIM(?))
+                OR LOWER(TRIM(department)) = 'all'
+                OR LOWER(TRIM(department)) = 'all branches'
+                OR LOWER(TRIM(department)) = 'common'
+                OR LOWER(TRIM(department)) LIKE '%all%'
+                OR id IN (SELECT subject_id FROM attendance_records WHERE student_id = ?)
+            )
+            ORDER BY code ASC
+        """, (student_dept, student_id))
         all_subjects = cursor.fetchall()
         
         subject_stats = []
@@ -56,21 +69,6 @@ def get_student_dashboard(current_user: Dict[str, Any] = Depends(require_student
         for subj in all_subjects:
             s_id = subj["id"]
             
-            # Count total sessions conducted for this subject matching student's class & division, OR attended by this student
-            cursor.execute("""
-                SELECT COUNT(DISTINCT id) as total_sessions
-                FROM attendance_sessions
-                WHERE subject_id = ?
-                  AND (
-                    (
-                      (LOWER(TRIM(class_name)) = LOWER(?) OR LOWER(TRIM(class_name)) LIKE '%' || LOWER(?) || '%')
-                      AND (LOWER(TRIM(division)) = LOWER(?) OR LOWER(TRIM(division)) = 'all' OR TRIM(division) = '')
-                    )
-                    OR id IN (SELECT session_id FROM attendance_records WHERE student_id = ? AND subject_id = ?)
-                  )
-            """, (s_id, student_class, student_class, student_div, student_id, s_id))
-            session_cnt = cursor.fetchone()["total_sessions"] or 0
-            
             # Count records attended by this student for this subject
             cursor.execute("""
                 SELECT COUNT(*) as attended_cnt
@@ -79,8 +77,26 @@ def get_student_dashboard(current_user: Dict[str, Any] = Depends(require_student
             """, (student_id, s_id))
             attended_cnt = cursor.fetchone()["attended_cnt"] or 0
             
-            # Actual total classes conducted for this subject for this student
-            effective_total = max(session_cnt, attended_cnt)
+            # If student has not verified their face yet, they are not eligible for live attendance sessions yet,
+            # so they must not be penalized with missed classes.
+            if is_verified:
+                cursor.execute("""
+                    SELECT COUNT(DISTINCT id) as total_sessions
+                    FROM attendance_sessions
+                    WHERE subject_id = ?
+                      AND (
+                        (
+                          (LOWER(TRIM(class_name)) = LOWER(?) OR LOWER(TRIM(class_name)) LIKE '%' || LOWER(?) || '%')
+                          AND (LOWER(TRIM(division)) = LOWER(?) OR LOWER(TRIM(division)) = 'all' OR TRIM(division) = '')
+                        )
+                        OR id IN (SELECT session_id FROM attendance_records WHERE student_id = ? AND subject_id = ?)
+                      )
+                """, (s_id, student_class, student_class, student_div, student_id, s_id))
+                session_cnt = cursor.fetchone()["total_sessions"] or 0
+                effective_total = max(session_cnt, attended_cnt)
+            else:
+                session_cnt = attended_cnt
+                effective_total = attended_cnt
             
             if effective_total > 0:
                 percentage = round((attended_cnt / effective_total) * 100.0, 1)
@@ -91,6 +107,8 @@ def get_student_dashboard(current_user: Dict[str, Any] = Depends(require_student
                 "subject_id": s_id,
                 "code": subj["code"],
                 "name": subj["name"],
+                "department": subj["department"],
+                "semester": subj["semester"],
                 "attended": attended_cnt,
                 "total": effective_total,
                 "missed": max(0, effective_total - attended_cnt),

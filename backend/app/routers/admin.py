@@ -31,7 +31,7 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
         cursor.execute("SELECT COUNT(*) as pending_cnt FROM pending_faces WHERE status = 'pending'")
         pending_faces_count = cursor.fetchone()["pending_cnt"] or 0
         
-        # 3. Present Today
+        # 3. Attendance Status Today
         cursor.execute("""
             SELECT COUNT(DISTINCT student_id) as present_today
             FROM attendance_records
@@ -39,7 +39,33 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
         """, (today_str,))
         present_today = cursor.fetchone()["present_today"] or 0
         
-        absent_today = max(0, active_students - present_today)
+        # Check if any sessions have been conducted or scheduled today
+        cursor.execute("SELECT COUNT(*) as session_count FROM attendance_sessions WHERE date = ?", (today_str,))
+        sessions_today_count = cursor.fetchone()["session_count"] or 0
+        
+        # Only verified active students whose class had a session today and did not attend are considered absent.
+        # If no sessions took place today, nobody is absent.
+        if sessions_today_count == 0:
+            absent_today = 0
+        else:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT s.id) as absent_cnt
+                FROM students s
+                WHERE s.account_status = 'active'
+                  AND s.face_status = 'verified'
+                  AND EXISTS (
+                      SELECT 1 FROM attendance_sessions ses
+                      WHERE ses.date = ?
+                        AND (LOWER(TRIM(ses.class_name)) = LOWER(TRIM(s.class_name)) OR LOWER(TRIM(ses.class_name)) = 'all' OR TRIM(ses.class_name) = '')
+                        AND (LOWER(TRIM(ses.division)) = LOWER(TRIM(s.division)) OR LOWER(TRIM(ses.division)) = 'all' OR TRIM(ses.division) = '')
+                  )
+                  AND s.id NOT IN (
+                      SELECT ar.student_id
+                      FROM attendance_records ar
+                      WHERE ar.attendance_date = ? AND ar.status IN ('present', 'late')
+                  )
+            """, (today_str, today_str))
+            absent_today = cursor.fetchone()["absent_cnt"] or 0
         
         # 4. Overall Attendance across all records
         cursor.execute("""

@@ -145,8 +145,12 @@ const api = (function () {
             const query = new URLSearchParams(params).toString();
             return request(`/api/attendance/records${query ? '?' + query : ''}`, { method: "GET" });
         },
-        getSubjects: () => request("/api/subjects", { method: "GET" }),
+        getSubjects: (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return request(`/api/subjects${query ? '?' + query : ''}`, { method: "GET" });
+        },
         createSubject: (data) => request("/api/subjects", { method: "POST", body: JSON.stringify(data) }),
+        updateSubject: (id, data) => request(`/api/subjects/${id}`, { method: "PUT", body: JSON.stringify(data) }),
         deleteSubject: (id) => request(`/api/subjects/${id}`, { method: "DELETE" }),
     };
 })();
