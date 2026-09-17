@@ -85,6 +85,27 @@ This repository is pre-configured for instant zero-configuration deployment on [
 
 ---
 
+### Step 3: Keep-Alive Ping Bot (Prevents Free-Tier Sleep)
+
+Render's free tier automatically spins down web services after **15 minutes of inactivity**, causing 50+ second cold start delays for attendees. Three solutions are pre-built to keep the system awake 24/7:
+
+#### 1. Zero-Setup GitHub Action (Automated 24/7 Cloud Ping)
+A pre-configured GitHub Actions workflow [keepalive.yml](file:///.github/workflows/keepalive.yml) runs every 12 minutes completely free on GitHub's cloud.
+- In your GitHub repository, go to **Settings > Secrets and variables > Actions**.
+- (Optional) Add a repository secret `RENDER_URL` with your Render URL (e.g., `https://bioscan-ai.onrender.com`). If not set, it defaults to the app URL.
+- The action pings `/api/health` automatically every 12 minutes.
+
+#### 2. Standalone Python Ping Bot ([ping_bot.py](file:///ping_bot.py))
+Run locally or on any server/container to monitor and keep the service awake:
+```bash
+python ping_bot.py --url https://your-app.onrender.com --interval 600
+```
+
+#### 3. Automatic Server Self-Ping
+If you add an environment variable `RENDER_EXTERNAL_URL` or `APP_URL` in your Render Dashboard settings (e.g. `https://your-app.onrender.com`), the backend server automatically initiates its own non-blocking keep-alive ping loop every 10 minutes on startup.
+
+---
+
 ## Default Credentials (Demo / Development)
 
 | Portal | Route | Credentials |

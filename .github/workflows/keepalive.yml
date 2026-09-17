@@ -1,0 +1,24 @@
+name: Keep-Alive Ping Bot (Render Free Tier)
+
+on:
+  schedule:
+    # Trigger every 12 minutes (Render sleeps after 15 minutes of inactivity)
+    - cron: '*/12 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Web Service
+        run: |
+          RENDER_URL="${{ secrets.RENDER_URL || 'https://attendancesystem-ihdo.onrender.com' }}"
+          HEALTH_URL="${RENDER_URL%/}/api/health"
+          echo "Pinging: $HEALTH_URL at $(date -u)"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "$HEALTH_URL")
+          echo "Response HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Success! BioScan AI is awake and active."
+          else
+            echo "Warning: Received status $HTTP_STATUS"
+          fi

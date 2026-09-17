@@ -1,6 +1,8 @@
 import os
 import sys
+import asyncio
 from pathlib import Path
+import httpx
 
 # Add backend directory to sys.path to ensure 'app' modules resolve cleanly in any environment (Render, Docker, Local)
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -32,13 +34,30 @@ app.add_middleware(
 )
 
 # Startup lifecycle: Initialize SQLite DB and seed default admin & demo subjects
+async def background_keep_alive():
+    external_url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("APP_URL")
+    if not external_url:
+        return
+    clean_url = external_url.rstrip("/") + "/api/health"
+    print(f"[KeepAlive] Background ping bot enabled for: {clean_url}")
+    await asyncio.sleep(120)  # Wait 2 minutes after launch
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.get(clean_url)
+                print(f"[KeepAlive] Pinged {clean_url} -> Status {res.status_code}")
+        except Exception as e:
+            print(f"[KeepAlive Warning] Self-ping failed: {e}")
+        await asyncio.sleep(600)  # Ping every 10 minutes (prevents 15m idle shutdown)
+
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     print("Initializing Database...")
     init_db()
     print("Checking Database Seed...")
     seed_database()
     print("System ready!")
+    asyncio.create_task(background_keep_alive())
 
 # Include API Routers
 app.include_router(auth.router)
