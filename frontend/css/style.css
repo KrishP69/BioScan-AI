@@ -788,6 +788,40 @@ select.form-control option {
     z-index: 4;
 }
 
+.face-guide-oval {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 240px;
+    height: 310px;
+    border: 2px dashed rgba(56, 189, 248, 0.7);
+    border-radius: 50% 50% 45% 45%;
+    pointer-events: none;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+    z-index: 4;
+}
+
+.scanner-hud {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 8px 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+
 /* Modals */
 .modal-overlay {
     position: fixed;

@@ -73,6 +73,13 @@ const FaceEngine = (function () {
             };
         }
 
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            return {
+                success: false,
+                error: "Webcam access requires a modern browser and a secure connection (HTTPS or localhost)."
+            };
+        }
+
         const constraintOptions = [
             { video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false },
             { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
@@ -95,7 +102,7 @@ const FaceEngine = (function () {
             let userMsg = "Unable to access webcam: " + (lastErr ? lastErr.message : "Unknown error");
             if (lastErr) {
                 if (lastErr.name === "NotAllowedError" || lastErr.name === "PermissionDeniedError") {
-                    userMsg = "Camera permission denied. Please click the icon in your browser URL bar and allow Camera access.";
+                    userMsg = "Camera permission denied. Please click the camera/lock icon in your browser URL bar and allow Camera access.";
                 } else if (lastErr.name === "NotReadableError" || lastErr.name === "TrackStartError" || (lastErr.message && lastErr.message.includes("video source"))) {
                     userMsg = "Camera is in use by another application (Zoom, Teams, Discord, Windows Camera app, or another browser tab).";
                 } else if (lastErr.name === "NotFoundError" || lastErr.name === "DevicesNotFoundError") {
@@ -106,8 +113,27 @@ const FaceEngine = (function () {
         }
 
         try {
+            videoElement.setAttribute("playsinline", "true");
+            videoElement.setAttribute("autoplay", "true");
+            videoElement.muted = true;
             videoElement.srcObject = activeStream;
-            await videoElement.play();
+
+            await new Promise((resolve) => {
+                if (videoElement.readyState >= 2) {
+                    resolve();
+                } else {
+                    videoElement.onloadedmetadata = () => resolve();
+                    setTimeout(resolve, 600);
+                }
+            });
+
+            try {
+                await videoElement.play();
+            } catch (playErr) {
+                console.warn("[BioScan AI] Direct videoElement.play() warning, retrying muted:", playErr);
+                videoElement.muted = true;
+                await videoElement.play();
+            }
 
             if (canvasOverlay) {
                 canvasOverlay.width = videoElement.videoWidth || 640;
@@ -392,6 +418,7 @@ const FaceEngine = (function () {
     }
 
     return {
+        init: loadModels,
         loadModels,
         startCamera,
         stopCamera,

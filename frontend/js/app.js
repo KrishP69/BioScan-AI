@@ -1278,12 +1278,13 @@ const app = (function () {
 
                 <!-- Camera stream container with Oval Head Guide -->
                 <div class="glass-card" style="padding:1.5rem; text-align:center; margin-bottom:1.5rem;">
-                    <div class="camera-wrapper" style="position:relative; display:inline-block; border-radius:var(--radius-lg); overflow:hidden; border:2px solid var(--border-accent); background:#000;">
-                        <video id="student-face-video" width="640" height="480" autoplay muted playsinline style="transform:scaleX(-1); display:block; max-width:100%; height:auto;"></video>
-                        <canvas id="student-face-canvas" width="640" height="480" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
+                    <div class="camera-wrapper camera-scanner-wrapper" style="position:relative; display:inline-block; border-radius:var(--radius-lg); overflow:hidden; border:2px solid var(--border-accent); background:#000; width:100%; max-width:640px;">
+                        <video id="student-face-video" class="camera-video" width="640" height="480" autoplay muted playsinline style="transform:scaleX(-1); display:block; width:100%; height:auto;"></video>
+                        <canvas id="student-face-canvas" class="camera-canvas-overlay" width="640" height="480" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; transform:scaleX(-1);"></canvas>
                         
                         <!-- Face Oval Guide Overlay -->
                         <div class="face-guide-oval"></div>
+                        <div class="scanner-laser-line"></div>
 
                         <!-- Live Status Overlay -->
                         <div id="student-scanner-hud" class="scanner-hud">
@@ -1310,7 +1311,7 @@ const app = (function () {
                     <h3 style="margin-bottom:1rem; color:var(--status-verified);"><i class="fa-solid fa-circle-check"></i> Biometric Sample Captured</h3>
                     <div style="display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap;">
                         <img id="captured-preview-img" style="width:140px; height:140px; border-radius:var(--radius-md); object-fit:cover; border:2px solid var(--status-verified);" alt="Face Preview">
-                        <div style="flex:1; min-width:260px;">
+                        <div style="flex:1; min-width:260px; text-align:left;">
                             <h4>Verification Passed</h4>
                             <p style="color:var(--text-secondary); font-size:0.88rem; margin:0.3rem 0 1rem;">
                                 AI Facial Feature Descriptor (128-dimensional embedding) successfully computed. Liveness score: <strong id="captured-liveness-val" style="color:var(--status-verified);">--</strong>
@@ -1332,7 +1333,6 @@ const app = (function () {
         // Initialize FaceEngine and camera
         const video = document.getElementById("student-face-video");
         const canvas = document.getElementById("student-face-canvas");
-        const hud = document.getElementById("student-scanner-hud");
         const statusTextEl = document.getElementById("hud-status-text");
         const checkFaceEl = document.getElementById("check-face");
         const checkLightingEl = document.getElementById("check-lighting");
@@ -1342,18 +1342,127 @@ const app = (function () {
         let lastAnalysis = null;
         let capturedData = null;
 
-        await FaceEngine.init();
-        const cameraStarted = await FaceEngine.startCamera(video, canvas);
-        if (!cameraStarted) {
-            statusTextEl.innerHTML = `<span style="color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> Camera Access Denied or Unavailable</span>`;
+        if (statusTextEl) {
+            statusTextEl.innerHTML = `<i class="fa-solid fa-camera fa-fade"></i> Connecting camera & neural networks...`;
+        }
+
+        const camRes = await FaceEngine.startCamera(video, canvas);
+        if (!camRes || !camRes.success) {
+            const errDetail = (camRes && camRes.error) ? camRes.error : "Camera Access Denied or Unavailable";
+            if (statusTextEl) {
+                statusTextEl.innerHTML = `<span style="color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> ${errDetail}</span>`;
+            }
+            if (checkFaceEl) {
+                checkFaceEl.innerHTML = `<span style="color:#ef4444;"><i class="fa-solid fa-circle-xmark"></i> Camera Off</span>`;
+            }
+            showToast(errDetail, "error");
             return;
+        }
+
+        if (statusTextEl) {
+            statusTextEl.innerHTML = `<span style="color:var(--text-secondary);"><i class="fa-solid fa-camera"></i> Align your face within the frame</span>`;
         }
 
         // Start tracking
         FaceEngine.startTrackingLoop((analysis) => {
             lastAnalysis = analysis;
-            // ... (rest of logic)
+            if (analysis && analysis.detected) {
+                if (checkFaceEl) {
+                    checkFaceEl.innerHTML = `<span style="color:var(--status-verified);"><i class="fa-solid fa-circle-check"></i> Face Detected</span>`;
+                }
+                if (checkLightingEl) {
+                    const lightColor = analysis.isGoodBrightness ? 'var(--status-verified)' : '#f59e0b';
+                    checkLightingEl.innerHTML = `<span style="color:${lightColor};"><i class="fa-solid fa-sun"></i> Lighting: ${analysis.brightness}</span>`;
+                }
+                if (checkLivenessEl) {
+                    checkLivenessEl.innerHTML = `<span style="color:var(--status-verified);"><i class="fa-solid fa-shield-halved"></i> Liveness: ${(analysis.livenessScore * 100).toFixed(0)}%</span>`;
+                }
+
+                if (statusTextEl) {
+                    if (analysis.isReady) {
+                        statusTextEl.innerHTML = `<span style="color:var(--status-verified);"><i class="fa-solid fa-circle-check"></i> Position optimal! Ready to capture.</span>`;
+                    } else {
+                        statusTextEl.innerHTML = `<span style="color:#38bdf8;"><i class="fa-solid fa-arrows-to-circle"></i> Align face inside the guide oval...</span>`;
+                    }
+                }
+            } else {
+                if (checkFaceEl) {
+                    checkFaceEl.innerHTML = `<span style="color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Detecting Face...</span>`;
+                }
+                if (checkLightingEl) {
+                    checkLightingEl.innerHTML = `<span style="color:var(--text-muted);"><i class="fa-solid fa-sun"></i> Lighting: --</span>`;
+                }
+                if (checkLivenessEl) {
+                    checkLivenessEl.innerHTML = `<span style="color:var(--text-muted);"><i class="fa-solid fa-shield-halved"></i> Liveness: --</span>`;
+                }
+                if (statusTextEl) {
+                    statusTextEl.innerHTML = `<span style="color:var(--text-secondary);"><i class="fa-solid fa-camera"></i> Looking for face in frame...</span>`;
+                }
+            }
         });
+
+        // Capture button click
+        if (btnCapture) {
+            btnCapture.addEventListener("click", () => {
+                if (!lastAnalysis || !lastAnalysis.detected || !lastAnalysis.descriptor) {
+                    return showToast("Please align your face inside the camera frame first.", "warning");
+                }
+
+                capturedData = {
+                    face_embedding: lastAnalysis.descriptor,
+                    preview_image: lastAnalysis.previewImage,
+                    liveness_score: lastAnalysis.livenessScore
+                };
+
+                const resultPanel = document.getElementById("capture-result-panel");
+                const previewImg = document.getElementById("captured-preview-img");
+                const livenessVal = document.getElementById("captured-liveness-val");
+
+                if (previewImg) previewImg.src = capturedData.preview_image;
+                if (livenessVal) livenessVal.textContent = `${(capturedData.liveness_score * 100).toFixed(0)}% (Passed)`;
+                if (resultPanel) {
+                    resultPanel.style.display = "block";
+                    resultPanel.scrollIntoView({ behavior: "smooth" });
+                }
+                showToast("Face sample captured! Review and submit for admin approval.", "info");
+            });
+        }
+
+        // Retake button click
+        const btnRetake = document.getElementById("btn-retake-face");
+        if (btnRetake) {
+            btnRetake.addEventListener("click", () => {
+                capturedData = null;
+                const resultPanel = document.getElementById("capture-result-panel");
+                if (resultPanel) resultPanel.style.display = "none";
+            });
+        }
+
+        // Submit for approval button
+        const btnSubmit = document.getElementById("btn-submit-face-approval");
+        if (btnSubmit) {
+            btnSubmit.addEventListener("click", async () => {
+                if (!capturedData) return;
+
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Submitting to Queue...`;
+
+                try {
+                    const res = await api.submitFaceRegistration({
+                        face_embedding: capturedData.face_embedding,
+                        preview_image: capturedData.preview_image
+                    });
+
+                    FaceEngine.stopCamera();
+                    showToast((res && res.message) || "Face registration submitted successfully! Pending admin approval.", "success");
+                    navigate("/student/dashboard");
+                } catch (err) {
+                    showToast(err.message || "Failed to submit face registration", "error");
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Submit for Admin Review`;
+                }
+            });
+        }
     }
 
     /* ==========================================================================
