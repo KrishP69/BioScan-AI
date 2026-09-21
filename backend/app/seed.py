@@ -23,24 +23,89 @@ def seed_database():
         else:
             admin_id = admin_user["id"]
 
-        # 2. Initial Default Subjects (Computer Engineering only; all other branches are assigned and managed directly by the Administrator)
+        # 2. Canonical branch normalization for existing subjects & students
+        cursor.execute("UPDATE subjects SET department = 'CMPN' WHERE department IN ('Computer Engineering', 'CSE', 'Computer')")
+        cursor.execute("UPDATE subjects SET department = 'INFT' WHERE department IN ('Information Technology', 'IT')")
+        cursor.execute("UPDATE subjects SET department = 'EXTC' WHERE department IN ('Electronics & Telecommunication', 'Electronics & Telecom', 'EXTC')")
+        cursor.execute("UPDATE subjects SET department = 'EXCS' WHERE department IN ('Electronics & Computer Science', 'EXCS')")
+
+        cursor.execute("UPDATE students SET department = 'CMPN' WHERE department IN ('Computer Engineering', 'CSE', 'Computer')")
+        cursor.execute("UPDATE students SET department = 'INFT' WHERE department IN ('Information Technology', 'IT')")
+        cursor.execute("UPDATE students SET department = 'EXTC' WHERE department IN ('Electronics & Telecommunication', 'Electronics & Telecom', 'EXTC')")
+        cursor.execute("UPDATE students SET department = 'EXCS' WHERE department IN ('Electronics & Computer Science', 'EXCS')")
+
+        # 3. Initial Default Curriculum Subjects across all 4 branches:
+        # CMPN: Computer Engineering
+        # INFT: Information Technology
+        # EXTC: Electronics & Telecommunication
+        # EXCS: Electronics & Computer Science
         subjects_data = [
-            ("DBMS", "Database Management Systems", "Computer Engineering", 5),
-            ("CN", "Computer Networks", "Computer Engineering", 5),
-            ("OS", "Operating Systems", "Computer Engineering", 5),
-            ("JAVA", "Java Programming", "Computer Engineering", 5),
-            ("AI", "Artificial Intelligence & ML", "Computer Engineering", 5),
+            # CMPN - Computer Engineering
+            ("DBMS", "Database Management Systems", "CMPN", 5),
+            ("CN", "Computer Networks", "CMPN", 5),
+            ("OS", "Operating Systems", "CMPN", 5),
+            ("TCS", "Theoretical Computer Science", "CMPN", 5),
+            ("SE", "Software Engineering", "CMPN", 5),
+            
+            # INFT - Information Technology
+            ("CNS", "Cryptography & Network Security", "INFT", 5),
+            ("IP", "Internet Programming", "INFT", 5),
+            ("ADMT", "Advanced Database Management", "INFT", 5),
+            ("EEB", "E-Commerce & E-Business", "INFT", 5),
+            ("AIDS", "Artificial Intelligence & Data Science", "INFT", 5),
+            
+            # EXTC - Electronics & Telecommunication
+            ("DC", "Digital Communication", "EXTC", 5),
+            ("DSP", "Discrete-Time Signal Processing", "EXTC", 5),
+            ("EME", "Electromagnetic Engineering", "EXTC", 5),
+            ("VLSID", "VLSI Design", "EXTC", 5),
+            ("CS", "Control Systems", "EXTC", 5),
+            
+            # EXCS - Electronics & Computer Science
+            ("COA", "Computer Organization & Architecture", "EXCS", 5),
+            ("ESD", "Embedded Systems Design", "EXCS", 5),
+            ("DCN", "Data Communication & Networks", "EXCS", 5),
+            ("WT", "Web Technologies", "EXCS", 5),
+            ("ML", "Machine Learning Fundamentals", "EXCS", 5),
         ]
         
         for code, name, dept, sem in subjects_data:
             cursor.execute("SELECT id FROM subjects WHERE code = ?", (code,))
-            if not cursor.fetchone():
+            row = cursor.fetchone()
+            if not row:
                 cursor.execute("""
                     INSERT INTO subjects (code, name, department, semester)
                     VALUES (?, ?, ?, ?)
                 """, (code, name, dept, sem))
+            else:
+                cursor.execute("UPDATE subjects SET department = ?, name = ? WHERE code = ?", (dept, name, code))
         
-        # 3. Seed Default System Settings
+        # 4. Reset Krish's student data as requested
+        cursor.execute("""
+            SELECT s.id as student_id, s.user_id 
+            FROM students s
+            JOIN users u ON s.user_id = u.id
+            WHERE s.name LIKE '%Krish%' OR s.roll_number = '24101B0025' OR LOWER(u.email) LIKE '%krish%'
+        """)
+        krish_rows = cursor.fetchall()
+        for kr in krish_rows:
+            sid = kr["student_id"]
+            uid = kr["user_id"]
+            cursor.execute("DELETE FROM attendance_records WHERE student_id = ?", (sid,))
+            cursor.execute("DELETE FROM pending_faces WHERE student_id = ?", (sid,))
+            cursor.execute("DELETE FROM face_profiles WHERE student_id = ?", (sid,))
+            cursor.execute("DELETE FROM students WHERE id = ?", (sid,))
+            cursor.execute("DELETE FROM users WHERE id = ?", (uid,))
+            print(f"[OK] Krish Patil data completely reset (student_id={sid}, user_id={uid}).")
+
+        # Also purge any leftover user accounts matching krish
+        cursor.execute("DELETE FROM users WHERE LOWER(email) LIKE '%krish%' OR LOWER(username) LIKE '%krish%'")
+
+        # 5. Clean up old test sessions (TY-CSE / CSK / All Branches)
+        cursor.execute("DELETE FROM attendance_records WHERE session_id IN (SELECT id FROM attendance_sessions WHERE class_name LIKE '%CSE%' OR session_name LIKE '%CSK%' OR division NOT IN ('A', 'B', 'C'))")
+        cursor.execute("DELETE FROM attendance_sessions WHERE class_name LIKE '%CSE%' OR session_name LIKE '%CSK%' OR division NOT IN ('A', 'B', 'C')")
+
+        # 6. Seed Default System Settings
         settings_data = [
             ("similarity_threshold", "0.50"),
             ("liveness_threshold", "0.50"),
@@ -53,6 +118,5 @@ def seed_database():
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO system_settings (key, value) VALUES (?, ?)", (key, val))
 
-        # 4. No demo students or demo sessions - keep clean for user's own data
-        print("[OK] Database verified: Admin account, subjects, and settings ready.")
+        print("[OK] Database verified: Admin account, 4 branches (CMPN, INFT, EXTC, EXCS) subjects, and settings ready.")
 

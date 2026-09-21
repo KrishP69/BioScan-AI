@@ -12,14 +12,12 @@ const app = (function () {
 
     // Branch Badge Helper for Cyber UI
     function getDeptBadge(dept) {
-        const d = (dept || "").toLowerCase();
-        if (d.includes("computer")) return `<span class="dept-badge badge-cse"><i class="fa-solid fa-laptop-code"></i> Computer Engg</span>`;
-        if (d.includes("information") || d.includes("it")) return `<span class="dept-badge badge-it"><i class="fa-solid fa-network-wired"></i> Info Tech</span>`;
-        if (d.includes("telecom") || d.includes("electronic") || d.includes("entc")) return `<span class="dept-badge badge-entc"><i class="fa-solid fa-microchip"></i> Electronics & TC</span>`;
-        if (d.includes("mech")) return `<span class="dept-badge badge-mech"><i class="fa-solid fa-gears"></i> Mechanical Engg</span>`;
-        if (d.includes("data") || d.includes("ai")) return `<span class="dept-badge badge-aids"><i class="fa-solid fa-brain"></i> AI & Data Sci</span>`;
-        if (d.includes("civil")) return `<span class="dept-badge badge-civil"><i class="fa-solid fa-trowel-bricks"></i> Civil Engg</span>`;
-        return `<span class="dept-badge badge-all"><i class="fa-solid fa-globe"></i> ${dept || 'Common'}</span>`;
+        const d = (dept || "").toUpperCase();
+        if (d === "CMPN" || d.includes("COMPUTER")) return `<span class="dept-badge badge-cse"><i class="fa-solid fa-laptop-code"></i> CMPN (Computer Engg)</span>`;
+        if (d === "INFT" || d.includes("INFORMATION") || d === "IT") return `<span class="dept-badge badge-it"><i class="fa-solid fa-network-wired"></i> INFT (IT)</span>`;
+        if (d === "EXTC" || d.includes("TELECOM")) return `<span class="dept-badge badge-entc"><i class="fa-solid fa-tower-broadcast"></i> EXTC (Electronic & TC)</span>`;
+        if (d === "EXCS" || (d.includes("ELECTRONIC") && d.includes("COMPUTER"))) return `<span class="dept-badge badge-aids"><i class="fa-solid fa-microchip"></i> EXCS (Electronic & CS)</span>`;
+        return `<span class="dept-badge badge-cse"><i class="fa-solid fa-graduation-cap"></i> ${dept || 'CMPN'}</span>`;
     }
 
     // Real-Time IST Digital Clock (Asia/Kolkata / UTC+5:30)
@@ -520,22 +518,31 @@ const app = (function () {
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">Department</label>
+                        <div class="form-group" style="flex:1.5;">
+                            <label class="form-label">Branch / Department</label>
                             <select id="reg-dept" class="form-control" required>
-                                <option value="Computer Engineering">Computer Engineering</option>
-                                <option value="Information Technology">Information Technology</option>
-                                <option value="Electronics & Telecom">Electronics & Telecom</option>
-                                <option value="Mechanical Engineering">Mechanical Engineering</option>
+                                <option value="CMPN">CMPN — Computer Engineering</option>
+                                <option value="INFT" selected>INFT — Information Technology</option>
+                                <option value="EXTC">EXTC — Electronic & Tele Comm</option>
+                                <option value="EXCS">EXCS — Electronic & Computer Science</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Class</label>
-                            <input type="text" id="reg-class" class="form-control" placeholder="e.g. TY-CSE" required>
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">Academic Year</label>
+                            <select id="reg-year" class="form-control" required>
+                                <option value="FE">FE (First Year)</option>
+                                <option value="SE">SE (Second Year)</option>
+                                <option value="TE" selected>TE / TY (Third Year)</option>
+                                <option value="BE">BE / LY (Final Year)</option>
+                            </select>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Division</label>
-                            <input type="text" id="reg-div" class="form-control" placeholder="e.g. A" required>
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">Division (Only A, B, C)</label>
+                            <select id="reg-div" class="form-control" required>
+                                <option value="A">Division A</option>
+                                <option value="B" selected>Division B</option>
+                                <option value="C">Division C</option>
+                            </select>
                         </div>
                     </div>
 
@@ -570,13 +577,17 @@ const app = (function () {
                 return showToast("Password and confirmation password do not match.", "error");
             }
 
+            const dept = document.getElementById("reg-dept").value;
+            const year = document.getElementById("reg-year").value;
+            const div = document.getElementById("reg-div").value;
+
             const payload = {
                 name: document.getElementById("reg-name").value.trim(),
                 roll_number: document.getElementById("reg-roll").value.trim(),
                 email: document.getElementById("reg-email").value.trim(),
-                department: document.getElementById("reg-dept").value,
-                class_name: document.getElementById("reg-class").value.trim(),
-                division: document.getElementById("reg-div").value.trim(),
+                department: dept,
+                class_name: `${year}-${dept}`,
+                division: div,
                 password: pwd,
                 confirm_password: confirmPwd
             };
@@ -2079,7 +2090,9 @@ const app = (function () {
 
                     if (res.matched) {
                         const st = res.student;
-                        if (res.already_marked) {
+                        if (res.wrong_class) {
+                            feedbackEl.innerHTML = `<span style="color:#ef4444; font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> ${res.message || 'Student is not enrolled in this session.'}</span>`;
+                        } else if (res.already_marked) {
                             feedbackEl.innerHTML = `<span style="color:#f59e0b;"><i class="fa-solid fa-circle-info"></i> ${st.name} (Roll: ${st.roll_number}) already marked present in this session.</span>`;
                         } else {
                             feedbackEl.innerHTML = `<span style="color:var(--status-verified);"><i class="fa-solid fa-circle-check"></i> Marked present: ${st.name} (${st.confidence}% match)</span>`;
@@ -2130,21 +2143,20 @@ const app = (function () {
     async function quickStartTodaySession() {
         try {
             const subData = await api.getSubjects();
-            const subjects = subData.subjects || [];
-            const subId = subjects.length > 0 ? subjects[0].id : 1;
-            const subCode = subjects.length > 0 ? subjects[0].code : "DBMS";
+            const subjects = (subData.subjects || []).filter(s => s.department && !s.department.toLowerCase().includes("all"));
+            const sub = subjects.length > 0 ? subjects[0] : { id: 1, code: "DBMS", department: "CMPN" };
             const todayStr = new Date().toISOString().split('T')[0];
             const now = new Date();
             const startStr = now.toTimeString().slice(0, 5);
             const endHour = new Date(now.getTime() + 60*60*1000).toTimeString().slice(0, 5);
 
             const payload = {
-                subject_id: subId,
-                session_name: `${subCode} Regular Lecture`,
+                subject_id: sub.id,
+                session_name: `${sub.code} Regular Lecture`,
                 date: todayStr,
                 start_time: startStr,
                 end_time: endHour,
-                class_name: "TY-CSE",
+                class_name: `TE-${sub.department || 'CMPN'}`,
                 division: "A"
             };
 
@@ -2315,13 +2327,10 @@ const app = (function () {
        VIEW: Admin Subjects (/admin/subjects) - Branch-Wise Curriculum Control
        ========================================================================== */
     const DEFAULT_BRANCH_OPTIONS = [
-        "Computer Engineering",
-        "Information Technology",
-        "Electronics & Telecom",
-        "Mechanical Engineering",
-        "AI & Data Science",
-        "Civil Engineering",
-        "All Branches"
+        "CMPN",
+        "INFT",
+        "EXTC",
+        "EXCS"
     ];
 
     function filterAdminSubjectsByBranch(branch) {
@@ -2527,14 +2536,17 @@ const app = (function () {
     }
 
     function promptAddSubject(preferredBranch) {
-        const customBranches = window._customBranches || [];
-        const existingDepts = (window._allAdminSubjects || []).map(s => s.department).filter(Boolean);
-        const branchList = Array.from(new Set([...DEFAULT_BRANCH_OPTIONS, ...existingDepts, ...customBranches]));
-
-        const defaultBranch = preferredBranch || (adminSubjectBranchFilter && adminSubjectBranchFilter !== "All" ? adminSubjectBranchFilter : "Computer Engineering");
+        const branchList = ["CMPN", "INFT", "EXTC", "EXCS"];
+        const branchDisplay = {
+            "CMPN": "CMPN — Computer Engineering",
+            "INFT": "INFT — Information Technology",
+            "EXTC": "EXTC — Electronic & Tele Comm",
+            "EXCS": "EXCS — Electronic & Computer Science"
+        };
+        const defaultBranch = preferredBranch || (adminSubjectBranchFilter && adminSubjectBranchFilter !== "All" ? adminSubjectBranchFilter : "CMPN");
         
         const branchOptionsHtml = branchList.map(b => 
-            `<option value="${b}" ${b.toLowerCase() === defaultBranch.toLowerCase() ? 'selected' : ''}>${b}</option>`
+            `<option value="${b}" ${b.toUpperCase() === defaultBranch.toUpperCase() ? 'selected' : ''}>${branchDisplay[b] || b}</option>`
         ).join("");
 
         showModal(
@@ -2595,12 +2607,16 @@ const app = (function () {
         const sub = subjects.find(s => s.id === id);
         if (!sub) return showToast("Subject details could not be found.", "error");
 
-        const customBranches = window._customBranches || [];
-        const existingDepts = subjects.map(s => s.department).filter(Boolean);
-        const branchList = Array.from(new Set([...DEFAULT_BRANCH_OPTIONS, ...existingDepts, ...customBranches]));
+        const branchList = ["CMPN", "INFT", "EXTC", "EXCS"];
+        const branchDisplay = {
+            "CMPN": "CMPN — Computer Engineering",
+            "INFT": "INFT — Information Technology",
+            "EXTC": "EXTC — Electronic & Tele Comm",
+            "EXCS": "EXCS — Electronic & Computer Science"
+        };
 
         const branchOptionsHtml = branchList.map(b => 
-            `<option value="${b}" ${b.toLowerCase() === (sub.department || '').toLowerCase() ? 'selected' : ''}>${b}</option>`
+            `<option value="${b}" ${b.toUpperCase() === (sub.department || '').toUpperCase() ? 'selected' : ''}>${branchDisplay[b] || b}</option>`
         ).join("");
 
         showModal(
@@ -2795,7 +2811,10 @@ const app = (function () {
                 window._availableSubjects = subData.subjects || [];
             } catch (e) {}
         }
-        const subjects = window._availableSubjects || [];
+        // Exclude generic 'All Branches' sessions
+        const subjects = (window._availableSubjects || []).filter(s => 
+            s.department && !s.department.toLowerCase().includes("all")
+        );
         const todayStr = new Date().toISOString().split('T')[0];
 
         showModal(
@@ -2804,7 +2823,7 @@ const app = (function () {
                 <div class="form-group">
                     <label class="form-label">Subject</label>
                     <select id="modal-ses-subject" class="form-control">
-                        ${subjects.length > 0 ? subjects.map(s => `<option value="${s.id}">[${s.department}] ${s.code} — ${s.name}</option>`).join("") : `<option value="1">DBMS — Database Management Systems</option>`}
+                        ${subjects.length > 0 ? subjects.map(s => `<option value="${s.id}">[${s.department}] ${s.code} — ${s.name}</option>`).join("") : `<option value="1">[CMPN] DBMS — Database Management Systems</option>`}
                     </select>
                 </div>
                 <div class="form-group">
@@ -2827,12 +2846,21 @@ const app = (function () {
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Class</label>
-                        <input type="text" id="modal-ses-class" class="form-control" value="TY-CSE" required>
+                        <label class="form-label">Target Academic Year</label>
+                        <select id="modal-ses-year" class="form-control">
+                            <option value="TE" selected>TE / TY (Third Year)</option>
+                            <option value="BE">BE / LY (Final Year)</option>
+                            <option value="SE">SE (Second Year)</option>
+                            <option value="FE">FE (First Year)</option>
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Division</label>
-                        <input type="text" id="modal-ses-div" class="form-control" value="A" required>
+                        <label class="form-label">Division (Only 3 Divisions: A, B, C)</label>
+                        <select id="modal-ses-div" class="form-control" required>
+                            <option value="A" selected>Division A</option>
+                            <option value="B">Division B</option>
+                            <option value="C">Division C</option>
+                        </select>
                     </div>
                 </div>
             `,
@@ -2844,14 +2872,22 @@ const app = (function () {
     }
 
     async function confirmCreateSession() {
+        const subSelect = document.getElementById("modal-ses-subject");
+        const subId = parseInt(subSelect.value);
+        const subjects = window._availableSubjects || [];
+        const chosenSub = subjects.find(s => s.id === subId);
+        const dept = chosenSub ? chosenSub.department : "CMPN";
+        const year = document.getElementById("modal-ses-year").value;
+        const div = document.getElementById("modal-ses-div").value;
+
         const payload = {
-            subject_id: parseInt(document.getElementById("modal-ses-subject").value),
+            subject_id: subId,
             session_name: document.getElementById("modal-ses-name").value.trim(),
             date: document.getElementById("modal-ses-date").value,
             start_time: document.getElementById("modal-ses-start").value,
             end_time: document.getElementById("modal-ses-end").value,
-            class_name: document.getElementById("modal-ses-class").value.trim(),
-            division: document.getElementById("modal-ses-div").value.trim()
+            class_name: `${year}-${dept}`,
+            division: div
         };
 
         closeModal();

@@ -15,3 +15,39 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.50  # Euclidean distance threshold (FaceNet standard <= 0.50)
 DEFAULT_LIVENESS_THRESHOLD = 0.50
+
+BRANCH_MAP = {
+    "CMPN": "CMPN",
+    "COMPUTER ENGINEERING": "CMPN",
+    "COMPUTER": "CMPN",
+    "CSE": "CMPN",
+    "INFT": "INFT",
+    "INFORMATION TECHNOLOGY": "INFT",
+    "IT": "INFT",
+    "EXTC": "EXTC",
+    "ELECTRONICS & TELECOMMUNICATION": "EXTC",
+    "ELECTRONIC AND TELE COMM": "EXTC",
+    "ELECTRONICS & TELECOM": "EXTC",
+    "ELECTRONICS AND TELECOMMUNICATION": "EXTC",
+    "EXCS": "EXCS",
+    "ELECTRONICS & COMPUTER SCIENCE": "EXCS",
+    "ELECTRONIC AND COMPUTER SCIENCE": "EXCS",
+    "ELECTRONICS AND COMPUTER SCIENCE": "EXCS",
+}
+
+BRANCH_NAMES = {
+    "CMPN": "Computer Engineering",
+    "INFT": "Information Technology",
+    "EXTC": "Electronics & Telecommunication",
+    "EXCS": "Electronics & Computer Science",
+}
+
+VALID_BRANCHES = ["CMPN", "INFT", "EXTC", "EXCS"]
+VALID_DIVISIONS = ["A", "B", "C"]
+
+def normalize_branch(name: str) -> str:
+    if not name:
+        return ""
+    clean = name.strip().upper()
+    return BRANCH_MAP.get(clean, clean)
+

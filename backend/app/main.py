@@ -94,5 +94,13 @@ async def serve_spa(full_path: str, request: Request):
         
     index_file = FRONTEND_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        return FileResponse(
+            str(index_file),
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     return JSONResponse(status_code=200, content={"message": "Frontend is initializing..."})
+

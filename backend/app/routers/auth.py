@@ -8,6 +8,7 @@ from app.models.schemas import (
 from app.database import get_db
 from app.auth import hash_password, verify_password, create_access_token, get_current_user
 from app.services.audit_service import log_audit_event
+from app.config import normalize_branch
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -49,10 +50,16 @@ def register_student(req: StudentRegisterRequest, request: Request):
         user_id = cursor.lastrowid
         
         # Create student profile
+        dept_clean = normalize_branch(req.department)
+        div_clean = req.division.strip().upper()
+        if div_clean not in ("A", "B", "C"):
+            div_clean = "A"
+        class_clean = req.class_name.strip()
+
         cursor.execute("""
             INSERT INTO students (user_id, name, roll_number, department, class_name, division, account_status, face_status)
             VALUES (?, ?, ?, ?, ?, ?, 'active', 'not_registered')
-        """, (user_id, name_clean, roll_clean, req.department.strip(), req.class_name.strip(), req.division.strip()))
+        """, (user_id, name_clean, roll_clean, dept_clean, class_clean, div_clean))
         student_id = cursor.lastrowid
         
         # Issue JWT access token

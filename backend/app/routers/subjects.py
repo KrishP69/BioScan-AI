@@ -4,6 +4,7 @@ from app.models.schemas import SubjectCreateRequest
 from app.database import get_db
 from app.auth import get_current_user, require_admin
 from app.services.audit_service import log_audit_event
+from app.config import normalize_branch
 
 router = APIRouter(prefix="/api/subjects", tags=["Subjects"])
 
@@ -21,16 +22,13 @@ def list_subjects(
             department = student.get("department")
             
         if department and department.strip().lower() not in ("all", "all branches"):
+            norm_dept = normalize_branch(department)
             cursor.execute("""
                 SELECT id, code, name, department, semester, created_at 
                 FROM subjects 
-                WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) 
-                   OR LOWER(TRIM(department)) = 'all'
-                   OR LOWER(TRIM(department)) = 'all branches'
-                   OR LOWER(TRIM(department)) = 'common'
-                   OR LOWER(TRIM(department)) LIKE '%all%'
+                WHERE department = ? OR LOWER(TRIM(department)) = LOWER(TRIM(?)) 
                 ORDER BY code ASC
-            """, (department.strip(),))
+            """, (norm_dept, department.strip()))
         else:
             cursor.execute("SELECT id, code, name, department, semester, created_at FROM subjects ORDER BY department ASC, code ASC")
             
@@ -45,7 +43,7 @@ def create_subject(
 ):
     code_clean = req.code.upper().strip()
     name_clean = req.name.strip()
-    dept_clean = req.department.strip()
+    dept_clean = normalize_branch(req.department)
     
     with get_db() as conn:
         cursor = conn.cursor()

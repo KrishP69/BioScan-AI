@@ -8,6 +8,7 @@ from app.database import get_db
 from app.auth import get_current_user, require_admin
 from app.services.face_service import find_matching_student
 from app.services.audit_service import log_audit_event
+from app.config import normalize_branch, VALID_BRANCHES, VALID_DIVISIONS
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
@@ -292,14 +293,15 @@ def recognize_face_and_mark_attendance(
         # 2. Check session exists and is active
         cursor.execute("""
             SELECT s.id, s.session_name, s.subject_id, s.class_name, s.division, s.status,
-                   sub.code as subject_code, sub.name as subject_name
+                   sub.code as subject_code, sub.name as subject_name, sub.department as department
             FROM attendance_sessions s
             JOIN subjects sub ON s.subject_id = sub.id
             WHERE s.id = ?
         """, (req.session_id,))
-        session = cursor.fetchone()
-        if not session:
+        session_row = cursor.fetchone()
+        if not session_row:
             raise HTTPException(status_code=404, detail="Attendance session not found.")
+        session = dict(session_row)
         if session["status"] != "active":
             raise HTTPException(status_code=400, detail="This attendance session is closed.")
 
@@ -322,6 +324,31 @@ def recognize_face_and_mark_attendance(
             }
 
         student_id = match["student_id"]
+
+        # 4b. Strict Branch & Division Enrollment Check
+        session_dept = normalize_branch(session["department"] if "department" in session else "")
+        student_dept = normalize_branch(match.get("department", ""))
+        session_div = (session.get("division") or "").strip().upper()
+        student_div = (match.get("division") or "").strip().upper()
+
+        mismatch_reasons = []
+        if session_dept and student_dept and session_dept != student_dept:
+            mismatch_reasons.append(f"Branch mismatch: student belongs to {student_dept}, but lecture is for {session_dept}")
+        if session_div and student_div and session_div in ("A", "B", "C") and student_div in ("A", "B", "C") and session_div != student_div:
+            mismatch_reasons.append(f"Division mismatch: student is in Division {student_div}, but lecture is for Division {session_div}")
+
+        if mismatch_reasons:
+            reason_msg = " & ".join(mismatch_reasons)
+            client_ip = request.client.host if request.client else None
+            log_audit_event("ATTENDANCE_REJECTED_MISMATCH", f"Recognition mismatch for '{match['name']}' (Roll: {match['roll_number']}): {reason_msg} in session '{session['session_name']}'.", current_user["id"], client_ip, conn=conn)
+            return {
+                "success": False,
+                "matched": True,
+                "wrong_class": True,
+                "message": f"⚠️ {match['name']} ({student_dept} Div-{student_div}) is not enrolled in this session ({session_dept} Div-{session_div}). Attendance not marked.",
+                "student": match
+            }
+
         subject_id = session["subject_id"]
         today_date = date.today().isoformat()
         current_time = datetime.now().strftime("%H:%M:%S")
