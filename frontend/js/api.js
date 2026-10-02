@@ -127,6 +127,7 @@ const api = (function () {
         changeAdminPassword: (data) => request("/api/admin/settings/password", { method: "POST", body: JSON.stringify(data) }),
         getSettings: () => request("/api/admin/settings", { method: "GET" }),
         updateSettings: (data) => request("/api/admin/settings", { method: "PUT", body: JSON.stringify(data) }),
+        getVaultStatus: () => request("/api/admin/security/vault-status", { method: "GET" }),
 
         // Attendance & Sessions
         getSessions: (status) => request(`/api/attendance/sessions${status ? '?status_filter=' + status : ''}`, { method: "GET" }),

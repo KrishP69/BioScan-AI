@@ -55,7 +55,9 @@ def find_matching_student(
         for row in profiles:
             try:
                 raw_emb = row["face_embedding"]
-                stored_embedding = json.loads(raw_emb) if isinstance(raw_emb, str) else raw_emb
+                from app.services.crypto_service import decrypt_biometric_data
+                decrypted_str = decrypt_biometric_data(raw_emb)
+                stored_embedding = json.loads(decrypted_str) if isinstance(decrypted_str, str) else decrypted_str
                 stored_norm = normalize_vector(stored_embedding)
 
                 # Compute Euclidean distance and Cosine similarity

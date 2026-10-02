@@ -101,9 +101,20 @@ def register_student(req: StudentRegisterRequest, request: Request):
 @router.post("/login")
 def login_student(req: StudentLoginRequest, request: Request):
     """
-    Student login endpoint using Email and Password.
+    Student login endpoint using Email and Password with brute-force protection.
     """
     email_clean = req.email.lower().strip()
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"student:{client_ip}:{email_clean}"
+    
+    # 1. Brute-force & rate-limit guard
+    from app.services.security_service import check_login_rate_limit, record_failed_login, record_successful_login
+    allowed, err_msg, wait_sec = check_login_rate_limit(rate_key)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=err_msg
+        )
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -118,9 +129,11 @@ def login_student(req: StudentLoginRequest, request: Request):
         row = cursor.fetchone()
         
         if not row or not verify_password(req.password, row["password_hash"]):
+            is_locked, remaining = record_failed_login(rate_key)
+            lock_msg = " Account locked for 5 minutes." if is_locked else f" ({remaining} attempts remaining before security lockout)"
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid student email or password."
+                detail=f"Invalid student email or password.{lock_msg}"
             )
             
         if row["account_status"] == "disabled":
@@ -128,6 +141,8 @@ def login_student(req: StudentLoginRequest, request: Request):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Your account has been disabled by an administrator. Please contact college admin."
             )
+            
+        record_successful_login(rate_key)
             
         token_payload = {
             "user_id": row["id"],
@@ -166,9 +181,20 @@ def login_student(req: StudentLoginRequest, request: Request):
 @router.post("/admin/login")
 def login_admin(req: AdminLoginRequest, request: Request):
     """
-    Admin login endpoint using Username and Password.
+    Admin login endpoint using Username and Password with brute-force lockout guard.
     """
     username_clean = req.username.strip()
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"admin:{client_ip}:{username_clean.lower()}"
+    
+    # 1. Brute-force & rate-limit guard
+    from app.services.security_service import check_login_rate_limit, record_failed_login, record_successful_login
+    allowed, err_msg, wait_sec = check_login_rate_limit(rate_key)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=err_msg
+        )
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -180,12 +206,16 @@ def login_admin(req: AdminLoginRequest, request: Request):
         row = cursor.fetchone()
         
         if not row or not verify_password(req.password, row["password_hash"]):
+            is_locked, remaining = record_failed_login(rate_key)
+            lock_msg = " Account locked for 5 minutes." if is_locked else f" ({remaining} attempts remaining before security lockout)"
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid administrator credentials."
+                detail=f"Invalid administrator credentials.{lock_msg}"
             )
             
-        # Check if default credentials ('admin' / 'admin') are used
+        record_successful_login(rate_key)
+            
+        # Check if legacy default credentials ('admin' / 'admin') are used
         is_default_password = (req.username == "admin" and req.password == "admin")
         
         token_payload = {

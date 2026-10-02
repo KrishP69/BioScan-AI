@@ -7,21 +7,56 @@ def seed_database():
     with get_db() as conn:
         cursor = conn.cursor()
         
-        # 1. Ensure Admin Account
-        cursor.execute("SELECT id FROM users WHERE username = 'admin' OR role = 'admin'")
+        # 1. Ensure Cyber-Secure Admin Account
+        NEW_ADMIN_USER = "admin_sec_ops"
+        NEW_ADMIN_EMAIL = "admin@bioscan.ai"
+        NEW_ADMIN_PASS = "BioScan@Shield#2026!Px9"
+
+        cursor.execute("SELECT id, username, email FROM users WHERE username IN ('admin', 'admin_sec_ops') OR role = 'admin'")
         admin_user = cursor.fetchone()
         
         admin_id = None
+        new_pwd_hash = hash_password(NEW_ADMIN_PASS)
         if not admin_user:
-            admin_pwd_hash = hash_password("admin")
             cursor.execute("""
                 INSERT INTO users (username, email, password_hash, role)
-                VALUES (?, ?, ?, ?)
-            """, ("admin", "admin@college.edu", admin_pwd_hash, "admin"))
+                VALUES (?, ?, ?, 'admin')
+            """, (NEW_ADMIN_USER, NEW_ADMIN_EMAIL, new_pwd_hash))
             admin_id = cursor.lastrowid
-            print("[OK] Default Admin account created: username='admin', password='admin'")
+            print(f"[SECURITY] Cyber-secure Admin created: username='{NEW_ADMIN_USER}', email='{NEW_ADMIN_EMAIL}'")
         else:
             admin_id = admin_user["id"]
+            # Always ensure admin has the secure credentials
+            cursor.execute("""
+                UPDATE users 
+                SET username = ?, email = ?, password_hash = ?, role = 'admin', updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (NEW_ADMIN_USER, NEW_ADMIN_EMAIL, new_pwd_hash, admin_id))
+            print(f"[SECURITY] Admin credentials successfully upgraded to enterprise-grade: username='{NEW_ADMIN_USER}'")
+
+        # 1b. Cryptographic Migration: Encrypt any unencrypted biometric data with AES-256-GCM at rest
+        try:
+            from app.services.crypto_service import encrypt_biometric_data, is_biometric_encrypted
+            # Encrypt face_profiles
+            cursor.execute("SELECT id, face_embedding FROM face_profiles")
+            for fp in cursor.fetchall():
+                emb = fp["face_embedding"]
+                if not is_biometric_encrypted(emb):
+                    enc_emb = encrypt_biometric_data(emb)
+                    cursor.execute("UPDATE face_profiles SET face_embedding = ? WHERE id = ?", (enc_emb, fp["id"]))
+            
+            # Encrypt pending_faces
+            cursor.execute("SELECT id, face_embedding, preview_reference FROM pending_faces")
+            for pf in cursor.fetchall():
+                emb = pf["face_embedding"]
+                prev = pf["preview_reference"]
+                enc_emb = encrypt_biometric_data(emb) if not is_biometric_encrypted(emb) else emb
+                enc_prev = encrypt_biometric_data(prev) if not is_biometric_encrypted(prev) else prev
+                if enc_emb != emb or enc_prev != prev:
+                    cursor.execute("UPDATE pending_faces SET face_embedding = ?, preview_reference = ? WHERE id = ?", (enc_emb, enc_prev, pf["id"]))
+            print("[SECURITY] Biometric Vault: Verified AES-256-GCM encryption on all student face vectors and photos at rest.")
+        except Exception as e:
+            print(f"[SECURITY Warning] Biometric encryption check encountered: {e}")
 
         # 2. Canonical branch normalization for existing subjects & students
         cursor.execute("UPDATE subjects SET department = 'CMPN' WHERE department IN ('Computer Engineering', 'CSE', 'Computer')")

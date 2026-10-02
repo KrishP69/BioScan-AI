@@ -351,12 +351,14 @@ def submit_face_registration(
     with get_db() as conn:
         cursor = conn.cursor()
         
-        # Insert pending face request
-        embedding_json = json.dumps(req.face_embedding)
+        # Encrypt sensitive student biometrics (embedding & camera capture) with AES-256-GCM
+        from app.services.crypto_service import encrypt_biometric_data
+        enc_embedding = encrypt_biometric_data(req.face_embedding)
+        enc_preview = encrypt_biometric_data(req.preview_image)
         cursor.execute("""
             INSERT INTO pending_faces (student_id, face_embedding, preview_reference, status)
             VALUES (?, ?, ?, 'pending')
-        """, (student_id, embedding_json, req.preview_image))
+        """, (student_id, enc_embedding, enc_preview))
         
         # Update student face status to 'pending'
         cursor.execute("""
