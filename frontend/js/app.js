@@ -3501,9 +3501,10 @@ const app = (function () {
         `;
 
         try {
-            const [data, vaultData] = await Promise.allSettled([
+            const [data, vaultData, adminData] = await Promise.allSettled([
                 api.getSettings(),
-                api.getVaultStatus()
+                api.getVaultStatus(),
+                api.getAdministrators()
             ]);
             const settings = (data.status === "fulfilled" && data.value.settings) ? data.value.settings : {};
             const vault = (vaultData.status === "fulfilled" && vaultData.value.vault) ? vaultData.value.vault : {
@@ -3514,12 +3515,13 @@ const app = (function () {
                 total_encrypted_profiles: "Verified",
                 total_encrypted_pending: "Verified"
             };
+            const administrators = (adminData.status === "fulfilled" && adminData.value.administrators) ? adminData.value.administrators : [];
 
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
                     <div>
                         <h2>Admin Security & Settings</h2>
-                        <p style="color:var(--text-secondary); font-size:0.92rem;">Enterprise cybersecurity configuration, admin credentials, and AI biometric vault telemetry.</p>
+                        <p style="color:var(--text-secondary); font-size:0.92rem;">Enterprise cybersecurity configuration, multi-admin management, and AI biometric vault telemetry.</p>
                     </div>
                     <button class="btn btn-secondary btn-sm" onclick="app.navigate('/admin/dashboard')">
                         <i class="fa-solid fa-arrow-left"></i> Dashboard
@@ -3613,6 +3615,74 @@ const app = (function () {
                             <div style="font-size:1.15rem; font-weight:800; color:#34d399; margin-top:0.3rem;">96-bit Nonces</div>
                             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.25rem;">Unique IV Per Biometric Save</div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Multiple Administrator Accounts & Concurrent Access Panel -->
+                <div class="glass-panel" style="padding:1.75rem; border-top:4px solid #38bdf8; margin-bottom:1.5rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:0.75rem;">
+                        <div>
+                            <h3 style="margin:0; display:flex; align-items:center; gap:0.6rem;">
+                                <i class="fa-solid fa-users-gear" style="color:#38bdf8;"></i> Administrator Accounts & Concurrent Logins
+                            </h3>
+                            <p style="color:var(--text-secondary); font-size:0.85rem; margin-top:0.3rem;">
+                                Multiple administrators can log in simultaneously from different devices using concurrent, independent JWT sessions.
+                            </p>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="app.promptAddAdmin()">
+                            <i class="fa-solid fa-user-plus"></i> Add Co-Administrator
+                        </button>
+                    </div>
+
+                    <div class="data-table-container">
+                        <table class="data-table" style="width:100%;">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Privilege Tier</th>
+                                    <th>Created At</th>
+                                    <th style="text-align:right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${administrators.length > 0 ? administrators.map(a => `
+                                    <tr>
+                                        <td>
+                                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                                <i class="fa-solid fa-shield-halved" style="color:${a.username === 'admin_sec_ops' ? '#f59e0b' : '#38bdf8'}; font-size:0.9rem;"></i>
+                                                <span style="font-weight:600; color:#fff;">${a.username}</span>
+                                                ${(currentUser && currentUser.username === a.username) ? '<span class="status-badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-size:0.7rem; padding:0.15rem 0.4rem;">YOU</span>' : ''}
+                                            </div>
+                                        </td>
+                                        <td style="color:var(--text-secondary); font-family:var(--font-mono); font-size:0.85rem;">${a.email || 'N/A'}</td>
+                                        <td>
+                                            <span class="status-badge ${a.username === 'admin_sec_ops' ? 'badge-verified' : ''}" style="font-size:0.75rem;">
+                                                ${a.username === 'admin_sec_ops' ? 'MASTER ADMIN' : 'CO-ADMINISTRATOR'}
+                                            </span>
+                                        </td>
+                                        <td style="color:var(--text-muted); font-size:0.8rem;">
+                                            ${a.created_at ? a.created_at.split(' ')[0] : 'Active'}
+                                        </td>
+                                        <td style="text-align:right;">
+                                            ${(currentUser && currentUser.id === a.id) ? `
+                                                <span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">Active Session</span>
+                                            ` : `
+                                                <button class="btn btn-sm btn-danger" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="app.handleDeleteAdmin(${a.id}, '${a.username}')">
+                                                    <i class="fa-solid fa-trash"></i> Remove
+                                                </button>
+                                            `}
+                                        </td>
+                                    </tr>
+                                `).join("") : `
+                                    <tr>
+                                        <td colspan="5" style="text-align:center; color:var(--text-muted); padding:1rem;">
+                                            No additional administrators configured.
+                                        </td>
+                                    </tr>
+                                `}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             `;
@@ -3743,6 +3813,68 @@ const app = (function () {
         }
     }
 
+    function promptAddAdmin() {
+        showModal(
+            `<i class="fa-solid fa-user-plus" style="color:#38bdf8;"></i> Add Co-Administrator`,
+            `
+            <p style="color:var(--text-secondary); font-size:0.88rem; margin-bottom:1.25rem;">
+                Create an additional administrator account with full administrative access. Multiple admins can be logged in concurrently.
+            </p>
+            <form id="create-admin-form" onsubmit="app.confirmAddAdmin(event)">
+                <div class="form-group">
+                    <label class="form-label">Admin Username</label>
+                    <input type="text" id="new-admin-user" class="form-control" placeholder="e.g. dept_admin_cmpn" required minlength="3">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Admin Email Address</label>
+                    <input type="email" id="new-admin-email" class="form-control" placeholder="admin2@college.edu" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="new-admin-pass" class="form-control" placeholder="Minimum 8 characters" required minlength="8">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1.5rem;">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Create Administrator</button>
+                </div>
+            </form>
+            `
+        );
+    }
+
+    async function confirmAddAdmin(e) {
+        e.preventDefault();
+        const username = document.getElementById("new-admin-user").value.trim();
+        const email = document.getElementById("new-admin-email").value.trim();
+        const password = document.getElementById("new-admin-pass").value;
+
+        try {
+            const res = await api.createAdministrator({ username, email, password });
+            closeModal();
+            showToast(res.message, "success");
+            const viewport = document.getElementById("app-viewport");
+            if (viewport && currentRoute.startsWith("/admin/settings")) {
+                renderAdminSettings(viewport);
+            }
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function handleDeleteAdmin(adminId, username) {
+        if (!confirm(`Are you sure you want to remove administrator '${username}'?`)) return;
+        try {
+            const res = await api.deleteAdministrator(adminId);
+            showToast(res.message, "success");
+            const viewport = document.getElementById("app-viewport");
+            if (viewport && currentRoute.startsWith("/admin/settings")) {
+                renderAdminSettings(viewport);
+            }
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
     return {
         init,
         navigate,
@@ -3785,7 +3917,10 @@ const app = (function () {
         promptResetStudentAttendanceAdmin,
         confirmResetStudentAttendanceAdmin,
         promptResetAllAttendanceAdmin,
-        confirmResetAllAttendanceAdmin
+        confirmResetAllAttendanceAdmin,
+        promptAddAdmin,
+        confirmAddAdmin,
+        handleDeleteAdmin
     };
 })();
 

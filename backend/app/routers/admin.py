@@ -6,7 +6,8 @@ from app.models.schemas import (
     FaceReviewRequest,
     StudentStatusUpdateRequest,
     AdminPasswordChangeRequest,
-    SettingsUpdateRequest
+    SettingsUpdateRequest,
+    CreateAdminUserRequest
 )
 from app.database import get_db
 from app.auth import require_admin, hash_password, verify_password
@@ -617,5 +618,101 @@ def reset_all_attendance_admin(
             "success": True,
             "message": f"Successfully reset all attendance records ({count} logs cleared).",
             "cleared_count": count
+        }
+
+@router.get("/administrators")
+def list_administrators(current_user: Dict[str, Any] = Depends(require_admin)):
+    """
+    List all registered administrative accounts.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, email, role, created_at, updated_at
+            FROM users
+            WHERE role = 'admin'
+            ORDER BY created_at ASC
+        """)
+        admins = [dict(r) for r in cursor.fetchall()]
+        return {"success": True, "count": len(admins), "administrators": admins}
+
+@router.post("/administrators")
+def create_administrator(
+    req: CreateAdminUserRequest,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Create a new administrator account (supports multiple concurrent admins).
+    """
+    username_clean = req.username.strip()
+    email_clean = req.email.lower().strip()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Check uniqueness of username
+        cursor.execute("SELECT id FROM users WHERE LOWER(username) = ?", (username_clean.lower(),))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail=f"Username '{username_clean}' is already taken.")
+            
+        # Check uniqueness of email
+        cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (email_clean,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail=f"Email '{email_clean}' is already associated with an account.")
+            
+        pwd_hash = hash_password(req.password)
+        cursor.execute("""
+            INSERT INTO users (username, email, password_hash, role)
+            VALUES (?, ?, ?, 'admin')
+        """, (username_clean, email_clean, pwd_hash))
+        new_admin_id = cursor.lastrowid
+        
+        client_ip = request.client.host if request.client else None
+        log_audit_event("ADMIN_USER_CREATED", f"Admin '{current_user.get('username')}' created new administrator account '{username_clean}' ({email_clean}).", current_user["id"], client_ip, conn=conn)
+        
+        return {
+            "success": True,
+            "message": f"Administrator account '{username_clean}' created successfully.",
+            "admin": {
+                "id": new_admin_id,
+                "username": username_clean,
+                "email": email_clean,
+                "role": "admin"
+            }
+        }
+
+@router.delete("/administrators/{admin_id}")
+def delete_administrator(
+    admin_id: int,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Deletes an administrator account. Prevents deleting oneself or leaving zero admins.
+    """
+    if admin_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="You cannot delete your own currently logged-in administrator account.")
+        
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email FROM users WHERE id = ? AND role = 'admin'", (admin_id,))
+        target_admin = cursor.fetchone()
+        if not target_admin:
+            raise HTTPException(status_code=404, detail="Administrator account not found.")
+            
+        cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")
+        tot_admins = cursor.fetchone()["count"] or 0
+        if tot_admins <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the only remaining administrator account.")
+            
+        cursor.execute("DELETE FROM users WHERE id = ?", (admin_id,))
+        
+        client_ip = request.client.host if request.client else None
+        log_audit_event("ADMIN_USER_DELETED", f"Admin '{current_user.get('username')}' removed administrator account '{target_admin['username']}'.", current_user["id"], client_ip, conn=conn)
+        
+        return {
+            "success": True,
+            "message": f"Administrator '{target_admin['username']}' successfully deleted."
         }
 

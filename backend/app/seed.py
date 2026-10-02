@@ -12,27 +12,32 @@ def seed_database():
         NEW_ADMIN_EMAIL = "admin@bioscan.ai"
         NEW_ADMIN_PASS = "BioScan@Shield#2026!Px9"
 
-        cursor.execute("SELECT id, username, email FROM users WHERE username IN ('admin', 'admin_sec_ops') OR role = 'admin'")
+        cursor.execute("SELECT id, username, email FROM users WHERE username = ?", (NEW_ADMIN_USER,))
         admin_user = cursor.fetchone()
         
         admin_id = None
         new_pwd_hash = hash_password(NEW_ADMIN_PASS)
         if not admin_user:
-            cursor.execute("""
-                INSERT INTO users (username, email, password_hash, role)
-                VALUES (?, ?, ?, 'admin')
-            """, (NEW_ADMIN_USER, NEW_ADMIN_EMAIL, new_pwd_hash))
-            admin_id = cursor.lastrowid
-            print(f"[SECURITY] Cyber-secure Admin created: username='{NEW_ADMIN_USER}', email='{NEW_ADMIN_EMAIL}'")
+            # Check if legacy 'admin' exists to upgrade
+            cursor.execute("SELECT id, username, email FROM users WHERE username = 'admin'")
+            legacy_admin = cursor.fetchone()
+            if legacy_admin:
+                cursor.execute("""
+                    UPDATE users 
+                    SET username = ?, email = ?, password_hash = ?, role = 'admin', updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (NEW_ADMIN_USER, NEW_ADMIN_EMAIL, new_pwd_hash, legacy_admin["id"]))
+                admin_id = legacy_admin["id"]
+                print(f"[SECURITY] Legacy admin upgraded to enterprise-grade: username='{NEW_ADMIN_USER}'")
+            else:
+                cursor.execute("""
+                    INSERT INTO users (username, email, password_hash, role)
+                    VALUES (?, ?, ?, 'admin')
+                """, (NEW_ADMIN_USER, NEW_ADMIN_EMAIL, new_pwd_hash))
+                admin_id = cursor.lastrowid
+                print(f"[SECURITY] Cyber-secure Admin created: username='{NEW_ADMIN_USER}', email='{NEW_ADMIN_EMAIL}'")
         else:
             admin_id = admin_user["id"]
-            # Always ensure admin has the secure credentials
-            cursor.execute("""
-                UPDATE users 
-                SET username = ?, email = ?, password_hash = ?, role = 'admin', updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """, (NEW_ADMIN_USER, NEW_ADMIN_EMAIL, new_pwd_hash, admin_id))
-            print(f"[SECURITY] Admin credentials successfully upgraded to enterprise-grade: username='{NEW_ADMIN_USER}'")
 
         # 1b. Cryptographic Migration: Encrypt any unencrypted biometric data with AES-256-GCM at rest
         try:

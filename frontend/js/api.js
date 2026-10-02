@@ -128,6 +128,9 @@ const api = (function () {
         getSettings: () => request("/api/admin/settings", { method: "GET" }),
         updateSettings: (data) => request("/api/admin/settings", { method: "PUT", body: JSON.stringify(data) }),
         getVaultStatus: () => request("/api/admin/security/vault-status", { method: "GET" }),
+        getAdministrators: () => request("/api/admin/administrators", { method: "GET" }),
+        createAdministrator: (data) => request("/api/admin/administrators", { method: "POST", body: JSON.stringify(data) }),
+        deleteAdministrator: (id) => request(`/api/admin/administrators/${id}`, { method: "DELETE" }),
 
         // Attendance & Sessions
         getSessions: (status) => request(`/api/attendance/sessions${status ? '?status_filter=' + status : ''}`, { method: "GET" }),
