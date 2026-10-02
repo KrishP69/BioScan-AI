@@ -173,6 +173,10 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
         """)
         recent_logs = [dict(r) for r in cursor.fetchall()]
 
+        cursor.execute("SELECT username, password_hash FROM users WHERE id = ?", (current_user["id"],))
+        admin_rec = cursor.fetchone()
+        is_default_admin = bool(admin_rec and (admin_rec["username"] == "admin" or verify_password("admin", admin_rec["password_hash"])))
+
         return {
             "success": True,
             "metrics": {
@@ -181,7 +185,8 @@ def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin)):
                 "pending_faces": pending_faces_count,
                 "present_today": present_today,
                 "absent_today": absent_today,
-                "overall_attendance_percentage": overall_attendance_pct
+                "overall_attendance_percentage": overall_attendance_pct,
+                "is_default_credentials": is_default_admin
             },
             "pending_preview": pending_items,
             "sessions_today": sessions_today,

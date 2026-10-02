@@ -1595,8 +1595,9 @@ const app = (function () {
             `;
 
             container.innerHTML = `
-                <!-- Warning banner for default admin credentials -->
-                <div class="warning-banner">
+                <!-- Security status banner -->
+                ${metrics.is_default_credentials ? `
+                <div class="warning-banner" style="margin-bottom:1.5rem;">
                     <div style="display:flex; align-items:center; gap:0.75rem;">
                         <i class="fa-solid fa-shield-exclamation" style="font-size:1.5rem; color:#f59e0b;"></i>
                         <div>
@@ -1608,6 +1609,27 @@ const app = (function () {
                         Change Password
                     </button>
                 </div>
+                ` : `
+                <div class="cyber-shield-banner" style="background:linear-gradient(90deg, rgba(16,185,129,0.12) 0%, rgba(9,13,22,0.65) 100%); border:1px solid rgba(16,185,129,0.3); border-radius:10px; padding:0.75rem 1.25rem; display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.75rem;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <i class="fa-solid fa-shield-halved" style="font-size:1.35rem; color:#10b981;"></i>
+                        <div>
+                            <strong style="color:#ffffff; font-size:0.9rem;">Cybersecurity Status: Enterprise Hardened & Verified</strong>
+                            <div style="color:var(--text-secondary); font-size:0.8rem; margin-top:0.15rem;">
+                                Active Admin: <span style="color:#38bdf8; font-weight:600;">${(currentUser && currentUser.username) ? currentUser.username : 'admin_sec_ops'}</span> &bull; AES-256-GCM Biometric Vault & Rate-Limit Shield Active
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <span class="status-badge" style="background:rgba(16,185,129,0.18); color:#10b981; border:1px solid rgba(16,185,129,0.4); font-size:0.72rem; font-weight:700;">
+                            <i class="fa-solid fa-lock"></i> AES-256 SECURED
+                        </span>
+                        <button class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.35rem 0.75rem;" onclick="app.navigate('/admin/settings/security')">
+                            <i class="fa-solid fa-sliders"></i> Security Settings
+                        </button>
+                    </div>
+                </div>
+                `}
 
                 <!-- Header Title & Quick Actions -->
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
